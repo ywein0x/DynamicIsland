@@ -27,8 +27,27 @@ static class Theme
         Set(resources, "ClipHover", light ? "#E5E5EA" : "#2C2C2E");
         Set(resources, "WindowBg", light ? "#F2F2F7" : "#000000");
         Set(resources, "GroupBg", light ? "#FFFFFF" : "#1C1C1E");
-        Set(resources, "SeparatorBrush", light ? "#C6C6C8" : "#38383A");
+        Set(resources, "SeparatorBrush", light ? "#D8D8DC" : "#2C2C2E");
+
+        // Settings window
+        Set(resources, "SidebarBg", light ? "#E9E9EE" : "#161618");
+        Set(resources, "HoverBg", light ? "#0F000000" : "#14FFFFFF");
+        Set(resources, "SegmentSelected", light ? "#FFFFFF" : "#636366");
+        Set(resources, "ScrollThumb", light ? "#48000000" : "#50FFFFFF");
+        Set(resources, "SwitchOff", light ? "#E5E5EA" : "#39393D");
     }
+
+    /// <summary>Dark title bar border and caption for a window, matching the theme (Windows 11).</summary>
+    public static void ApplyWindowFrame(IntPtr hwnd)
+    {
+        var dark = IsLight ? 0 : 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+    }
+
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     static void Set(ResourceDictionary resources, string key, string color)
     {

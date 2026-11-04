@@ -44,6 +44,50 @@ public sealed class VolumeService : IDisposable, IMMNotificationClient
         _device = null;
     }
 
+    /// <summary>The default output's master volume (0..1).</summary>
+    public float Level => _device?.AudioEndpointVolume.MasterVolumeLevelScalar ?? 0;
+
+    /// <summary>How loud a program is playing right now (0..1), e.g. other people talking in Discord.</summary>
+    public float SessionPeak(string processPrefix)
+    {
+        try
+        {
+            var manager = _device?.AudioSessionManager;
+            if (manager == null)
+                return 0;
+            manager.RefreshSessions();
+            var sessions = manager.Sessions;
+            float peak = 0;
+            for (var i = 0; i < sessions.Count; i++)
+            {
+                var session = sessions[i];
+                var pid = (int)session.GetProcessID;
+                if (!_processNames.TryGetValue(pid, out var name))
+                {
+                    try { name = System.Diagnostics.Process.GetProcessById(pid).ProcessName; }
+                    catch { name = ""; }
+                    _processNames[pid] = name;
+                }
+                if (name.StartsWith(processPrefix, StringComparison.OrdinalIgnoreCase))
+                    peak = Math.Max(peak, session.AudioMeterInformation.MasterPeakValue);
+            }
+            return peak;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    readonly Dictionary<int, string> _processNames = [];
+
+    /// <summary>Sets the default output's master volume (0..1).</summary>
+    public void SetLevel(float level)
+    {
+        if (_device != null)
+            _device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(level, 0, 1);
+    }
+
     void OnVolumeNotification(AudioVolumeNotificationData data) =>
         Application.Current.Dispatcher.InvokeAsync(() => Changed?.Invoke(data.MasterVolume, data.Muted));
 

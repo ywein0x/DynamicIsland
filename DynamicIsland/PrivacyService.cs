@@ -17,6 +17,11 @@ public sealed class PrivacyService
 
     /// <summary>(isCamera, app name) when an app starts using the device.</summary>
     public event Action<bool, string>? Started;
+    /// <summary>(isCamera, app name) when an app stops using the device.</summary>
+    public event Action<bool, string>? Stopped;
+
+    /// <summary>Whether an app is using the microphone right now.</summary>
+    public bool MicInUseBy(string app) => _inUse["microphone"].Contains(app);
 
     public void Start()
     {
@@ -33,6 +38,8 @@ public sealed class PrivacyService
             var now = ActiveApps(kind);
             foreach (var app in now.Except(_inUse[kind]))
                 Started?.Invoke(kind == "webcam", app);
+            foreach (var app in _inUse[kind].Except(now))
+                Stopped?.Invoke(kind == "webcam", app);
             _inUse[kind] = now;
         }
     }
@@ -73,7 +80,10 @@ public sealed class PrivacyService
             // Registry unavailable; report nothing.
         }
 
-        return apps.Select(NotificationService.AppName).ToHashSet();
+        // The island's own entry never needs announcing.
+        return apps.Select(NotificationService.AppName)
+            .Where(app => !app.Equals("DynamicIsland", StringComparison.OrdinalIgnoreCase))
+            .ToHashSet();
     }
 
     // In use while a session has started and not yet stopped.

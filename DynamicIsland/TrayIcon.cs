@@ -23,6 +23,7 @@ sealed class TrayIcon : IDisposable
 
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Ayarlar", null, (_, _) => openSettings());
+
         menu.Items.Add("Pano geçmişi", null, (_, _) => openClipboard());
         menu.Items.Add("Dosya rafı", null, (_, _) => openShelf());
         menu.Items.Add(new Forms.ToolStripSeparator());

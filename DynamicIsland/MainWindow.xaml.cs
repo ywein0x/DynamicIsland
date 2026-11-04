@@ -16,8 +16,8 @@ namespace DynamicIsland;
 // Features live in the other MainWindow.*.cs partial files.
 public partial class MainWindow : Window
 {
-    enum Transient { None, Volume, Battery, Notification, Lock, Screenshot, DownloadDone, Privacy, Game, Update }
-    enum ExpandKind { None, Media, Timer, Clipboard, Shelf }
+    enum Transient { None, Volume, Battery, Notification, Lock, Screenshot, DownloadDone, Privacy, Game, Update, Calendar }
+    enum ExpandKind { None, Media, Timer, Clipboard, Shelf, Home, Calendar, Inbox, Discord, Forecast }
     enum BubbleKind { None, Media, Timer, Download }
 
     sealed record PendingTransient(Transient Kind, TimeSpan Duration, Action Apply, DateTime Since);
@@ -84,14 +84,12 @@ public partial class MainWindow : Window
         Marquee.Enabled = Settings.Get(Feature.Marquee);
         InitializeComponent();
         Theme.Apply(Resources);
-
-        Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
-        Top = 0;
+        ApplyAppearance();
 
         _panels =
         [
             CompactMedia, ExpandedMedia, VolumePanel, BatteryPanel, LockPanel, InfoPanel, StatsPanel, TimerCompact, TimerExpanded,
-            NotificationPanel, ScreenshotPanel, ClipboardPanel, DownloadPanel, ShelfCompact, ShelfPanel,
+            NotificationPanel, ScreenshotPanel, ClipboardPanel, DownloadPanel, ShelfCompact, ShelfPanel, HomePanel, DiscordPanel, DiscordCard, InboxPanel, CalendarPanel, ForecastPanel,
         ];
         foreach (var panel in _panels)
         {
@@ -106,7 +104,8 @@ public partial class MainWindow : Window
         _collapseTimer.Tick += (_, _) =>
         {
             _collapseTimer.Stop();
-            if (!Island.IsMouseOver && !_dragInside)
+            // The calendar has a text box; it closes on click-away instead.
+            if (!Island.IsMouseOver && !_dragInside && _expand != ExpandKind.Calendar)
                 Expand(ExpandKind.None);
         };
         _peekHideTimer.Tick += (_, _) =>
@@ -134,6 +133,10 @@ public partial class MainWindow : Window
         InitTimer();
         InitSystem();
         InitShelf();
+        RemoveOldAssistantFiles();
+        InitHome();
+        InitCalendar();
+        InitDiscord();
 
         Loaded += OnLoaded;
         Apply();
@@ -146,8 +149,11 @@ public partial class MainWindow : Window
         _updateTimer.Start();
         StartMedia();
         StartSystem();
+        StartCalendar();
+        StartDiscord();
         _tray = new TrayIcon(
             OpenSettings,
+
             () => Expand(ExpandKind.Clipboard),
             () => Expand(ExpandKind.Shelf),
             () => _ = CheckForUpdatesAsync(manual: true),
@@ -161,6 +167,7 @@ public partial class MainWindow : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
         StartClipboardListener(hwnd);
+
     }
 
     protected override void OnClosed(EventArgs e)
@@ -177,6 +184,7 @@ public partial class MainWindow : Window
     {
         Theme.Apply(Resources);
         Marquee.Enabled = Settings.Get(Feature.Marquee);
+        ApplyAppearance();
         CompactTitle.Restart();
         TitleText.Restart();
         Refresh();
@@ -193,6 +201,7 @@ public partial class MainWindow : Window
         var hover = _hover && !_hoverSuppressed;
         var showMedia = _state != null && (Settings.AlwaysShowMedia || _mediaFlash || _peek || hover);
         var showTimer = TimerActive && (_timerFlash || _peek || hover || _timerUrgent || _timer == TimerState.Done);
+        var showDiscord = _discordCall && DiscordOn && (_discordFlash || _peek || hover);
         var showDownload = _download != null && Settings.Get(Feature.Downloads) && (_downloadFlash || _peek || hover);
         var showShelf = _shelf.Count > 0 && Settings.Get(Feature.Shelf) && (_peek || hover);
         var showStats = Settings.Get(Feature.SystemStats) && (_peek || hover);
@@ -200,7 +209,17 @@ public partial class MainWindow : Window
         double w, h, r, shadow = 0;
         FrameworkElement? panel;
 
-        if (_expand == ExpandKind.Timer)
+        if (_expand == ExpandKind.Home)
+            (w, h, r, shadow, panel) = (400, HomePanel.Height, 32, 0.5, HomePanel);
+        else if (_expand == ExpandKind.Calendar)
+            (w, h, r, shadow, panel) = (400, CalendarPanel.Height, 32, 0.5, CalendarPanel);
+        else if (_expand == ExpandKind.Inbox)
+            (w, h, r, shadow, panel) = (400, InboxPanel.Height, 32, 0.5, InboxPanel);
+        else if (_expand == ExpandKind.Discord)
+            (w, h, r, shadow, panel) = (400, DiscordCard.Height, 32, 0.5, DiscordCard);
+        else if (_expand == ExpandKind.Forecast)
+            (w, h, r, shadow, panel) = (400, ForecastPanel.Height, 32, 0.5, ForecastPanel);
+        else if (_expand == ExpandKind.Timer)
             (w, h, r, shadow, panel) = (380, 120, 44, 0.5, TimerExpanded);
         else if (_expand == ExpandKind.Media)
             (w, h, r, shadow, panel) = (380, 180, 44, 0.5, ExpandedMedia);
@@ -220,10 +239,12 @@ public partial class MainWindow : Window
             (w, h, r, panel) = (250, PillHeight, PillRadius, LockPanel);
         else if (_transient == Transient.DownloadDone)
             (w, h, r, panel) = (300, PillHeight, PillRadius, DownloadPanel);
-        else if (_transient is Transient.Privacy or Transient.Game or Transient.Update)
+        else if (_transient is Transient.Privacy or Transient.Game or Transient.Update or Transient.Calendar)
             (w, h, r, panel) = (320, PillHeight, PillRadius, InfoPanel);
         else if (showTimer)
             (w, h, r, panel) = (230, PillHeight, PillRadius, TimerCompact);
+        else if (showDiscord)
+            (w, h, r, panel) = (300, PillHeight, PillRadius, DiscordPanel);
         else if (showDownload)
             (w, h, r, panel) = (300, PillHeight, PillRadius, DownloadPanel);
         else if (showMedia)
@@ -244,13 +265,13 @@ public partial class MainWindow : Window
 
         _width.Target = w;
         _height.Target = h;
-        _radius.Target = r;
+        _radius.Target = r * CornerFactor;
         _shadow.Target = shadow;
 
         // Hidden unless there is something to show, so it never sits on top of browser tabs.
         var visible = !_fullscreen
                       && (Expanded || _transient != Transient.None || showMedia || showTimer || showDownload
-                          || showShelf || showStats || _peek || hover);
+                          || showShelf || showStats || showDiscord || _peek || hover);
         _visible.Target = visible ? 1 : 0;
 
         if (panel != _panel)
@@ -303,7 +324,11 @@ public partial class MainWindow : Window
 
     void Expand(ExpandKind kind)
     {
+
+        if (_expand == ExpandKind.Calendar && kind != ExpandKind.Calendar)
+            AcceptKeyboard(false);
         _expand = kind;
+        _fromHome = false;
         if (kind != ExpandKind.None)
         {
             // An open card takes over; whatever pill was showing comes back afterwards.
@@ -333,7 +358,7 @@ public partial class MainWindow : Window
     static int Priority(Transient kind) => kind switch
     {
         Transient.Battery => 5,
-        Transient.Privacy => 4,
+        Transient.Privacy or Transient.Calendar => 4,
         Transient.Notification or Transient.Screenshot => 3,
         Transient.DownloadDone or Transient.Game or Transient.Update => 2,
         _ => 1,
@@ -492,6 +517,7 @@ public partial class MainWindow : Window
         _visible.Step(dt);
         _shiftX.Step(dt);
         _bubble.Step(dt);
+
         foreach (var bar in _bars)
             bar.Step(dt);
 
@@ -528,14 +554,14 @@ public partial class MainWindow : Window
         var shift = _shiftX.Value;
         var v = Math.Clamp(_visible.Value, 0, 1) * Math.Clamp(1 - Math.Abs(shift) / 260, 0, 1);
         Island.Opacity = v;
-        IslandScale.ScaleX = IslandScale.ScaleY = 0.7 + 0.3 * Math.Clamp(_visible.Value, 0, 1);
+        IslandScale.ScaleX = IslandScale.ScaleY = (0.7 + 0.3 * Math.Clamp(_visible.Value, 0, 1)) * SizeFactor;
         IslandShift.X = shift;
         Island.Visibility = _visible.Target == 0 && v < 0.02 ? Visibility.Hidden : Visibility.Visible;
 
         var b = Math.Clamp(_bubble.Value, 0, 1) * v;
         Bubble.Opacity = b;
-        BubbleScale.ScaleX = BubbleScale.ScaleY = 0.5 + 0.5 * Math.Clamp(_bubble.Value, 0, 1);
-        BubbleShift.X = w / 2 + BubbleGap + Bubble.Width / 2 + shift;
+        BubbleScale.ScaleX = BubbleScale.ScaleY = (0.5 + 0.5 * Math.Clamp(_bubble.Value, 0, 1)) * SizeFactor;
+        BubbleShift.X = (w / 2 + BubbleGap + Bubble.Width / 2) * SizeFactor + shift;
         Bubble.Visibility = b < 0.02 ? Visibility.Hidden : Visibility.Visible;
 
         foreach (var panel in _panels)
@@ -669,6 +695,7 @@ public partial class MainWindow : Window
 
     void Island_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+
         _pressPoint = e.GetPosition(this);
         _pressing = true;
         _swiping = false;
@@ -713,7 +740,10 @@ public partial class MainWindow : Window
 
         if (Expanded)
         {
-            Expand(ExpandKind.None);
+            if (_fromHome)
+                OpenHome();
+            else
+                Expand(ExpandKind.None);
             return;
         }
 
@@ -722,7 +752,7 @@ public partial class MainWindow : Window
             if (_timer == TimerState.Done)
                 StopTimer();
             else
-                Expand(ExpandKind.Timer);
+                OpenHome();
         }
         else if (_panel == NotificationPanel)
         {
@@ -743,6 +773,12 @@ public partial class MainWindow : Window
         {
             if (_transient == Transient.Update)
                 InstallUpdate();
+
+            else if (_transient == Transient.Calendar)
+            {
+                _transientTimer.Stop();
+                OpenHome();
+            }
             else
                 DismissTransient();
         }
@@ -750,13 +786,9 @@ public partial class MainWindow : Window
         {
             Expand(ExpandKind.Shelf);
         }
-        else if (_state != null && _panel != StatsPanel)
+        else
         {
-            Expand(ExpandKind.Media);
-        }
-        else if (_timer is TimerState.Running or TimerState.Paused)
-        {
-            Expand(ExpandKind.Timer);
+            OpenHome();
         }
     }
 
@@ -770,7 +802,7 @@ public partial class MainWindow : Window
             settle.Stop();
             _hoverSuppressed = true;
             _peek = false;
-            _mediaFlash = _timerFlash = _downloadFlash = false;
+            _mediaFlash = _timerFlash = _downloadFlash = _discordFlash = false;
             _expand = ExpandKind.None;
             EndTransient();
 
@@ -799,22 +831,13 @@ public partial class MainWindow : Window
         }
     }
 
-    void ContextMenu_Opened(object sender, RoutedEventArgs e) => StopTimerItem.IsEnabled = TimerActive;
-
-    void ClipboardHistory_Click(object sender, RoutedEventArgs e) => Expand(ExpandKind.Clipboard);
-
-    void ShelfMenu_Click(object sender, RoutedEventArgs e) => Expand(ExpandKind.Shelf);
-
-    void SettingsMenu_Click(object sender, RoutedEventArgs e) => OpenSettings();
-
-    void Exit_Click(object sender, RoutedEventArgs e) => Close();
-
     void OpenSettings()
     {
         if (_settingsWindow == null)
         {
             _settingsWindow = new SettingsWindow(() => CheckForUpdatesAsync(manual: true));
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+
         }
         _settingsWindow.Show();
         if (_settingsWindow.WindowState == WindowState.Minimized)
@@ -822,6 +845,21 @@ public partial class MainWindow : Window
         _settingsWindow.Activate();
     }
 
+    // ---------- Appearance ----------
+
+    double SizeFactor => Settings.IslandSize switch { "small" => 0.88, "large" => 1.15, _ => 1.0 };
+
+    static double CornerFactor => Settings.IslandCorners switch { "sharp" => 0.5, "round" => 1.25, _ => 1.0 };
+
+    /// <summary>The window is mostly transparent; it just has to fit the island at the chosen size.</summary>
+    void ApplyAppearance()
+    {
+        var scale = Math.Max(1, SizeFactor);
+        Width = 460 * scale;
+        Height = 480 * scale;
+        Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
+        Top = 0;
+    }
     // ---------- Win32 ----------
 
     const int GWL_EXSTYLE = -20;

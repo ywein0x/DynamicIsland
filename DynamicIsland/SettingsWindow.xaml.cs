@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+
 
 namespace DynamicIsland;
 
@@ -21,6 +23,7 @@ public partial class SettingsWindow : Window
     string _updateStatusText = "";
     TextBlock? _updateStatus;
 
+
     public SettingsWindow(Func<Task> checkForUpdates)
     {
         _checkForUpdates = checkForUpdates;
@@ -30,6 +33,7 @@ public partial class SettingsWindow : Window
         _categories =
         [
             new("Genel", "", "#8E8E93", GeneralPage),
+            new("Görünüm", "", "#AF52DE", AppearancePage),
             new("Müzik", "", "#FF2D55", MusicPage),
             new("Bildirimler", "", "#FF3B30", NotificationsPage),
             new("Sistem", "", "#34C759", SystemPage),
@@ -98,6 +102,7 @@ public partial class SettingsWindow : Window
     void ShowPage(Category category)
     {
         _updateStatus = null;
+
         Page.Children.Clear();
         Page.Children.Add(new TextBlock
         {
@@ -121,11 +126,94 @@ public partial class SettingsWindow : Window
     [
         Group(null,
             ToggleRow("Windows ile başlat", "Bilgisayar açılınca ada da açılır", () => Autostart.IsEnabled, v => Autostart.IsEnabled = v),
-            ThemeRow()),
+            Row("Şehir", "Ana menüdeki hava durumu kartı için", CityBox())),
         Note("Adayı kapatmak için gizli simgeler alanındaki ikona sağ tıklayıp Çıkış'ı seç."),
     ];
 
-    FrameworkElement[] MusicPage() =>
+    FrameworkElement[] AppearancePage() =>
+    [
+        Group(null,
+            ThemeRow(),
+            SegmentRow("Ada boyutu", [("small", "Küçük"), ("normal", "Normal"), ("large", "Büyük")],
+                Settings.IslandSize, v => Settings.IslandSize = v),
+            SegmentRow("Köşeler", [("sharp", "Keskin"), ("normal", "Normal"), ("round", "Yuvarlak")],
+                Settings.IslandCorners, v => Settings.IslandCorners = v),
+            Row("Vurgu rengi", "Hava durumu, takvim, ses ve müzik çubukları", AccentPicker())),
+    ];
+
+    Grid SegmentRow(string title, (string Value, string Label)[] options, string current, Action<string> set)
+    {
+        var segments = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var (value, label) in options)
+        {
+            var option = new RadioButton { Content = label, GroupName = title, Style = (Style)FindResource("Segment"), IsChecked = current == value };
+            option.Checked += (_, _) => set(value);
+            segments.Children.Add(option);
+        }
+        var frame = new Border { CornerRadius = new CornerRadius(8), Child = segments }.Themed(Border.BackgroundProperty, "TrackBrush");
+        return Row(title, null, frame);
+    }
+
+    FrameworkElement AccentPicker()
+    {
+        string[] colors = [Theme.DefaultAccent, "#30D158", "#FF9F0A", "#FF375F", "#BF5AF2", "#FFD60A"];
+        var picker = new StackPanel { Orientation = Orientation.Horizontal };
+        var swatches = new List<(Border Swatch, string Color)>();
+        void Mark()
+        {
+            foreach (var (swatch, color) in swatches)
+                swatch.BorderThickness = new Thickness(string.Equals(color, Settings.Accent, StringComparison.OrdinalIgnoreCase) ? 2.5 : 0);
+        }
+        foreach (var color in colors)
+        {
+            var swatch = new Border
+            {
+                Width = 22,
+                Height = 22,
+                CornerRadius = new CornerRadius(11),
+                Margin = new Thickness(5, 0, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
+            };
+            swatch.SetResourceReference(Border.BorderBrushProperty, "Fg");
+            swatch.MouseLeftButtonUp += (_, _) =>
+            {
+                Settings.Accent = color;
+                Mark();
+            };
+            swatches.Add((swatch, color));
+            picker.Children.Add(swatch);
+        }
+        Mark();
+        return picker;
+    }
+
+    TextBlock Caption(string text) =>
+        new TextBlock { Text = text.ToUpper(new System.Globalization.CultureInfo("tr-TR")), FontSize = 11.5, Margin = new Thickness(14, 6, 0, 6) }
+            .Themed(TextBlock.ForegroundProperty, "SecondaryText");
+
+    /// <summary>The city for the weather card; saved when the field loses focus.</summary>
+    FrameworkElement CityBox()
+    {
+        var box = new TextBox
+        {
+            Width = 160,
+            FontSize = 12.5,
+            Text = Settings.WeatherCity,
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            Padding = new Thickness(8, 5, 8, 5),
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        box.SetResourceReference(Control.ForegroundProperty, "Fg");
+        box.SetResourceReference(TextBoxBase.CaretBrushProperty, "Fg");
+        box.LostFocus += (_, _) =>
+        {
+            if (box.Text.Trim().Length > 0)
+                Settings.WeatherCity = box.Text.Trim();
+        };
+        return new Border { CornerRadius = new CornerRadius(7), Child = box }.Themed(Border.BackgroundProperty, "TrackBrush");
+    }    FrameworkElement[] MusicPage() =>
     [
         Group(null,
             ToggleRow("Müziği sürekli göster", "Kapalıyken sadece şarkı değişince birkaç saniye görünür",
@@ -135,14 +223,32 @@ public partial class SettingsWindow : Window
         Note("YouTube videoları ve Shorts gösterilmez; sadece müzik uygulamaları ve YouTube Music gibi şarkı bilgisi gönderen siteler."),
     ];
 
-    FrameworkElement[] NotificationsPage() =>
-    [
-        Group(null,
-            FeatureRow(Feature.Notifications, "Uygulama bildirimleri", "WhatsApp, Discord gibi uygulamaların bildirimleri"),
-            FeatureRow(Feature.Downloads, "İndirmeler", "Tarayıcı indirmelerinin ilerlemesi"),
-            FeatureRow(Feature.Screenshots, "Ekran görüntüsü önizlemesi", "Win+Shift+S sonrası küçük önizleme")),
-        Note("Bildirimlerin sadece adada görünmesini istersen Windows'ta Rahatsız Etme modunu açabilirsin."),
-    ];
+    FrameworkElement[] NotificationsPage()
+    {
+        var page = new List<FrameworkElement>
+        {
+            Group(null,
+                FeatureRow(Feature.Notifications, "Uygulama bildirimleri", "WhatsApp, Discord gibi uygulamaların bildirimleri"),
+                ToggleRow("Rahatsız Etme", "Bildirimler adada açılmaz, ana menüdeki Bildirim listesinde birikir",
+                    () => Settings.DoNotDisturb, v => Settings.DoNotDisturb = v),
+                FeatureRow(Feature.Downloads, "İndirmeler", "Tarayıcı indirmelerinin ilerlemesi"),
+                FeatureRow(Feature.Screenshots, "Ekran görüntüsü önizlemesi", "Win+Shift+S sonrası küçük önizleme")),
+        };
+
+        // One switch per app that has sent something so far.
+        var apps = Settings.NotificationApps;
+        page.Add(Caption("Uygulamalar"));
+        if (apps.Count == 0)
+        {
+            page.Add(Note("Bildirim gönderen uygulamalar burada listelenir; her birini ayrı ayrı kapatabilirsin."));
+        }
+        else
+        {
+            page.Add(Group(null, apps.OrderBy(a => a).Select(app =>
+                (FrameworkElement)ToggleRow(app, null, () => !Settings.IsAppMuted(app), v => Settings.SetAppMuted(app, !v))).ToArray()));
+        }
+        return [.. page];
+    }
 
     FrameworkElement[] SystemPage() =>
     [
@@ -151,6 +257,7 @@ public partial class SettingsWindow : Window
             FeatureRow(Feature.Battery, "Şarj ve düşük pil"),
             FeatureRow(Feature.LockKeys, "Caps Lock ve Num Lock"),
             FeatureRow(Feature.Privacy, "Kamera ve mikrofon", "Bir uygulama kullanmaya başlayınca haber verir"),
+            FeatureRow(Feature.DiscordActivity, "Discord", "Sesli kanalda olduğunu ve konuşulduğunu gösterir"),
             FeatureRow(Feature.SystemStats, "Sistem durumu", "Üst kenarda beklerken CPU, RAM ve GPU sıcaklığı")),
     ];
 

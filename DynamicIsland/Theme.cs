@@ -7,6 +7,8 @@ namespace DynamicIsland;
 /// <summary>Light and dark palettes (iOS system colors), swapped in as dynamic resources.</summary>
 static class Theme
 {
+    public const string DefaultAccent = "#64D2FF";
+
     public static bool IsLight => Settings.Theme switch
     {
         "light" => true,
@@ -35,6 +37,12 @@ static class Theme
         Set(resources, "SegmentSelected", light ? "#FFFFFF" : "#636366");
         Set(resources, "ScrollThumb", light ? "#48000000" : "#50FFFFFF");
         Set(resources, "SwitchOff", light ? "#E5E5EA" : "#39393D");
+
+        // Accent: progress and volume bars stay plain until the user picks a color.
+        var accent = Settings.Accent;
+        resources["AccentColor"] = (Color)ColorConverter.ConvertFromString(accent);
+        Set(resources, "Accent", accent);
+        Set(resources, "AccentBar", accent == DefaultAccent ? (light ? "#000000" : "#FFFFFF") : accent);
     }
 
     /// <summary>Dark title bar border and caption for a window, matching the theme (Windows 11).</summary>

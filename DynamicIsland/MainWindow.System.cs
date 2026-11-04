@@ -50,6 +50,11 @@ public partial class MainWindow
         _notifications.Received += OnNotification;
         _locks.Toggled += OnLockToggled;
         _privacy.Started += OnPrivacyStarted;
+        _privacy.Stopped += (camera, app) =>
+        {
+            if (!camera && app == DiscordName)
+                SetDiscordCall(false);
+        };
 
         _downloads.Started += _ =>
         {
@@ -182,6 +187,14 @@ public partial class MainWindow
         if (!Settings.Get(Feature.Notifications))
             return;
 
+        // Switched off for this app: nothing at all. Do Not Disturb: quietly into the list only.
+        Settings.RememberNotificationApp(toast.App);
+        if (Settings.IsAppMuted(toast.App))
+            return;
+        AddToInbox(toast);
+        if (Settings.DoNotDisturb)
+            return;
+
         // A second banner while one is up gets a little nudge instead of a fresh entrance.
         if (_transient == Transient.Notification)
             _height.Velocity += 120;
@@ -193,9 +206,11 @@ public partial class MainWindow
             NotifTitle.Text = toast.Title;
             NotifBody.Text = toast.Body;
             NotifBody.Visibility = toast.Body.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-            NotifIcon.ImageSource = toast.Icon;
-            NotifInitial.Text = toast.App[..1].ToUpperInvariant();
-            NotifIconBg.Background = new SolidColorBrush(NotificationService.BrandColor(toast.App));
+            // The notification's own picture, or the app's real icon; the letter is the last resort.
+            var picture = toast.Icon ?? ShellIcons.ForApp(toast.AppId);
+            NotifIcon.ImageSource = picture;
+            NotifInitial.Text = picture == null ? toast.App[..1].ToUpperInvariant() : "";
+            NotifIconBg.Background = picture == null ? new SolidColorBrush(NotificationService.BrandColor(toast.App)) : Brushes.Transparent;
         });
     }
 
@@ -212,6 +227,11 @@ public partial class MainWindow
 
     void OnPrivacyStarted(bool camera, string app)
     {
+        if (!camera && app == DiscordName && DiscordOn)
+        {
+            SetDiscordCall(true);
+            return;
+        }
         if (!Settings.Get(Feature.Privacy))
             return;
         ShowTransient(Transient.Privacy, TimeSpan.FromSeconds(3.5), InfoContent(

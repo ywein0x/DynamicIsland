@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:DynamicIsland"
         Title="Dynamic Island"
-        Width="460" Height="320"
+        Width="460" Height="560"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
         WindowStartupLocation="Manual"
@@ -20,6 +20,9 @@
         <SolidColorBrush x:Key="ArtPlaceholder" Color="#2C2C2E" />
         <SolidColorBrush x:Key="ClipBg" Color="#1C1C1E" />
         <SolidColorBrush x:Key="ClipHover" Color="#2C2C2E" />
+        <Color x:Key="AccentColor">#64D2FF</Color>
+        <SolidColorBrush x:Key="Accent" Color="#64D2FF" />
+        <SolidColorBrush x:Key="AccentBar" Color="#FFFFFF" />
 
         <!-- Accent colors are the same in both themes, like iOS -->
         <SolidColorBrush x:Key="Green" Color="#30D158" />
@@ -109,6 +112,82 @@
             </Setter>
         </Style>
 
+        <!-- Card on the home menu -->
+        <Style x:Key="HomeCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ClipBg}" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+
+        <!-- Day in the month view -->
+        <Style x:Key="CalendarDay" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource Fg}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Width="30" Height="30">
+                            <Ellipse x:Name="Hover" Fill="{DynamicResource ClipHover}" Opacity="0" />
+                            <Ellipse Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1.4" />
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Hover" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Timer length on the home menu -->
+        <Style x:Key="HomeChip" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource Fg}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="5,0,0,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{DynamicResource ClipBg}" CornerRadius="14" Padding="10,7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource Orange}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Borderless text input -->
+        <Style x:Key="PlainInput" TargetType="TextBox">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{DynamicResource Fg}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource Accent}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <ScrollViewer x:Name="PART_ContentHost" Background="Transparent" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Small text button ("Temizle") -->
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
@@ -190,25 +269,6 @@
             <Border.Effect>
                 <DropShadowEffect x:Name="Shadow" BlurRadius="30" ShadowDepth="6" Direction="270" Opacity="0" />
             </Border.Effect>
-            <Border.ContextMenu>
-                <ContextMenu Opened="ContextMenu_Opened">
-                    <MenuItem Header="Zamanlayıcı">
-                        <MenuItem Header="1 dakika" Tag="1" Click="StartTimer_Click" />
-                        <MenuItem Header="5 dakika" Tag="5" Click="StartTimer_Click" />
-                        <MenuItem Header="10 dakika" Tag="10" Click="StartTimer_Click" />
-                        <MenuItem Header="15 dakika" Tag="15" Click="StartTimer_Click" />
-                        <MenuItem Header="25 dakika" Tag="25" Click="StartTimer_Click" />
-                        <MenuItem Header="1 saat" Tag="60" Click="StartTimer_Click" />
-                        <Separator />
-                        <MenuItem x:Name="StopTimerItem" Header="Zamanlayıcıyı durdur" Click="TimerCancel_Click" />
-                    </MenuItem>
-                    <MenuItem Header="Pano geçmişi" Click="ClipboardHistory_Click" />
-                    <MenuItem Header="Dosya rafı" Click="ShelfMenu_Click" />
-                    <Separator />
-                    <MenuItem Header="Ayarlar…" Click="SettingsMenu_Click" />
-                    <MenuItem Header="Çıkış" Click="Exit_Click" />
-                </ContextMenu>
-            </Border.ContextMenu>
 
             <!-- Panels are centered on the island each frame so they stay put while it springs. -->
             <Canvas x:Name="Stage">
@@ -285,7 +345,7 @@
                                   MouseLeftButtonUp="Track_MouseLeftButtonUp">
                                 <Border Height="5" Background="{DynamicResource TrackBrush}" CornerRadius="2.5" />
                                 <Border x:Name="ProgressFill" Height="5" Width="0" HorizontalAlignment="Left"
-                                        Background="{DynamicResource Fg}" CornerRadius="2.5" />
+                                        Background="{DynamicResource AccentBar}" CornerRadius="2.5" />
                             </Grid>
                             <TextBlock x:Name="RemainingText" Grid.Column="2" FontSize="11" TextAlignment="Right"
                                        Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
@@ -316,7 +376,7 @@
                                Text="&#xE995;" />
                     <Grid Width="160" Height="5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0">
                         <Border Background="{DynamicResource TrackBrush}" CornerRadius="2.5" />
-                        <Border x:Name="VolumeFill" Width="0" HorizontalAlignment="Left" Background="{DynamicResource Fg}" CornerRadius="2.5" />
+                        <Border x:Name="VolumeFill" Width="0" HorizontalAlignment="Left" Background="{DynamicResource AccentBar}" CornerRadius="2.5" />
                     </Grid>
                 </Grid>
 
@@ -515,6 +575,310 @@
                             <WrapPanel x:Name="ShelfItems" Margin="8,8,8,0" />
                         </Grid>
                     </Grid>
+                </Grid>
+
+
+                <!-- Home menu: what's happening now, then shortcuts -->
+                <Grid x:Name="HomePanel" Width="400" Height="180" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="HomeContent" VerticalAlignment="Top" Margin="14,14,14,8">
+
+                        <!-- Idle: the clock -->
+                        <Border x:Name="HomeIdleCard" Style="{StaticResource HomeCard}" Padding="16,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="HomeClock" FontSize="32" FontWeight="Light" Foreground="{DynamicResource Fg}"
+                                               Typography.NumeralAlignment="Tabular" />
+                                    <TextBlock x:Name="HomeDate" FontSize="13" Foreground="{DynamicResource SecondaryText}"
+                                               VerticalAlignment="Bottom" Margin="12,0,0,7" />
+                                </StackPanel>
+                                <TextBlock x:Name="HomeStats" FontSize="11.5" Foreground="{DynamicResource SecondaryText}"
+                                           Typography.NumeralAlignment="Tabular" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Music -->
+                        <Border x:Name="HomeMusicCard" Style="{StaticResource HomeCard}" Cursor="Hand" MouseLeftButtonUp="HomeMusic_Click">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="44" Height="44" CornerRadius="10" Background="{DynamicResource ArtPlaceholder}">
+                                    <Border CornerRadius="10">
+                                        <Border.Background>
+                                            <ImageBrush x:Name="HomeArt" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HomeTitle" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="HomeArtist" FontSize="12" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Önceki şarkı">
+                                        <Path Style="{StaticResource Glyph}" Data="M20,1 L20,13 L11,7 Z M10,1 L10,13 L1,7 Z" />
+                                    </Button>
+                                    <Button Style="{StaticResource IconButton}" Click="PlayPause_Click">
+                                        <Grid Width="18" Height="20">
+                                            <Path x:Name="HomePlayIcon" Style="{StaticResource Glyph}" Data="M2,1 L2,19 L16,10 Z" />
+                                            <Path x:Name="HomePauseIcon" Style="{StaticResource Glyph}" Visibility="Collapsed" Data="M2,1 H6 V19 H2 Z M12,1 H16 V19 H12 Z" />
+                                        </Grid>
+                                    </Button>
+                                    <Button Style="{StaticResource IconButton}" Click="Next_Click">
+                                        <Path Style="{StaticResource Glyph}" Data="M1,1 L1,13 L10,7 Z M11,1 L11,13 L20,7 Z" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Timer -->
+                        <Border x:Name="HomeTimerCard" Style="{StaticResource HomeCard}" Cursor="Hand" MouseLeftButtonUp="HomeTimer_Click">
+                            <Grid>
+                                <Grid Width="22" Height="22" HorizontalAlignment="Left" Margin="4,0,0,0">
+                                    <Viewbox>
+                                        <Grid Width="20" Height="20">
+                                            <Ellipse Stroke="{StaticResource OrangeDim}" StrokeThickness="2.5" />
+                                            <Path x:Name="HomeTimerRing" Stroke="{StaticResource Orange}" StrokeThickness="2.5"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                        </Grid>
+                                    </Viewbox>
+                                </Grid>
+                                <TextBlock x:Name="HomeTimerLabel" FontSize="13" Foreground="{DynamicResource Fg}"
+                                           VerticalAlignment="Center" Margin="38,0,0,0" />
+                                <TextBlock x:Name="HomeTimerText" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Orange}"
+                                           Typography.NumeralAlignment="Tabular" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Download -->
+                        <Border x:Name="HomeDownloadCard" Style="{StaticResource HomeCard}" Cursor="Hand" MouseLeftButtonUp="HomeDownload_Click">
+                            <Grid>
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE896;" FontSize="16" Foreground="{StaticResource Blue}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center" Margin="7,0,0,0" />
+                                <TextBlock x:Name="HomeDownloadName" FontSize="13" Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" Margin="38,0,130,0" />
+                                <TextBlock x:Name="HomeDownloadDetail" FontSize="12" Foreground="{DynamicResource SecondaryText}"
+                                           Typography.NumeralAlignment="Tabular" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Discord -->
+                        <Border x:Name="HomeDiscordCard" Style="{StaticResource HomeCard}" Cursor="Hand" Visibility="Collapsed" MouseLeftButtonUp="HomeDiscord_Click">
+                            <Grid>
+                                <Border x:Name="HomeDiscordIcon" Width="26" Height="26" CornerRadius="8" Background="#5865F2" HorizontalAlignment="Left" Margin="2,0,0,0">
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE95B;" FontSize="14" Foreground="White"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Text="Discord" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Fg}"
+                                           VerticalAlignment="Center" Margin="38,0,0,0" />
+                                <TextBlock x:Name="HomeDiscordDetail" FontSize="12" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="100,0,6,0" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Weather and calendar side by side -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeWeather_Click">
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock x:Name="HomeWeatherCity" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,0,0,1" />
+                                        <TextBlock x:Name="HomeWeatherTemp" FontSize="24" FontWeight="Light" Foreground="{DynamicResource Accent}" />
+                                        <TextBlock x:Name="HomeWeatherSky" FontSize="11.5" Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="HomeWeatherRange" FontSize="11" Foreground="{DynamicResource SecondaryText}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Right" Margin="0,4,0,0" />
+                                </Grid>
+                            </Border>
+                            <Border Grid.Column="2" Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeCalendar_Click">
+                                <StackPanel>
+                                    <TextBlock x:Name="HomeCalendarDay" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,0,0,3" />
+                                    <TextBlock x:Name="HomeCalendarTime" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
+                                    <TextBlock x:Name="HomeCalendarTitle" FontSize="11.5" Foreground="{DynamicResource Fg}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Most used apps, from Windows' own usage record -->
+                        <Border x:Name="HomeAppsCard" Style="{StaticResource HomeCard}" Padding="6,9,6,5" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="En çok kullanılanlar" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" Margin="8,0,0,2" />
+                                <UniformGrid x:Name="HomeApps" Rows="1" Columns="5" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Shortcuts -->
+                        <UniformGrid x:Name="HomeTiles" Rows="1" Columns="5" Margin="0,2,0,0">
+                            <Button Style="{StaticResource IconButton}" Click="HomeTimerTile_Click">
+                                <StackPanel Width="68">
+                                    <Border Width="42" Height="42" CornerRadius="12" Background="#FF9F0A">
+                                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE916;" FontSize="18" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Zamanlayıcı" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Click="HomeInbox_Click">
+                                <StackPanel Width="68">
+                                    <Grid Width="42" Height="42">
+                                        <Border CornerRadius="12" Background="#FF375F">
+                                            <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xEA8F;" FontSize="18" Foreground="White"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Border x:Name="HomeInboxBadge" MinWidth="16" Height="16" CornerRadius="8" Background="#FF3B30" Padding="4,0"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0" Visibility="Collapsed"
+                                                BorderBrush="{DynamicResource IslandBg}" BorderThickness="1">
+                                            <TextBlock x:Name="HomeInboxCount" FontSize="9.5" FontWeight="SemiBold" Foreground="White"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Text="Bildirim" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Click="HomeClipboard_Click">
+                                <StackPanel Width="68">
+                                    <Border Width="42" Height="42" CornerRadius="12" Background="#5E5CE6">
+                                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" FontSize="18" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Pano" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Click="HomeShelf_Click">
+                                <StackPanel Width="68">
+                                    <Border Width="42" Height="42" CornerRadius="12" Background="#0A84FF">
+                                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8B7;" FontSize="18" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Raf" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" Click="HomeSettings_Click">
+                                <StackPanel Width="68">
+                                    <Border Width="42" Height="42" CornerRadius="12" Background="#636366">
+                                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE713;" FontSize="18" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Ayarlar" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </UniformGrid>
+
+                        <!-- Timer lengths, replacing the shortcuts for a moment -->
+                        <StackPanel x:Name="HomeChips" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,10" Visibility="Collapsed">
+                            <Button Style="{StaticResource IconButton}" Click="HomeChipsBack_Click" ToolTip="Geri">
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE72B;" FontSize="13" Foreground="{DynamicResource SecondaryText}" />
+                            </Button>
+                            <Button Style="{StaticResource HomeChip}" Tag="1" Content="1 dk" Click="StartTimer_Click" />
+                            <Button Style="{StaticResource HomeChip}" Tag="5" Content="5 dk" Click="StartTimer_Click" />
+                            <Button Style="{StaticResource HomeChip}" Tag="10" Content="10 dk" Click="StartTimer_Click" />
+                            <Button Style="{StaticResource HomeChip}" Tag="15" Content="15 dk" Click="StartTimer_Click" />
+                            <Button Style="{StaticResource HomeChip}" Tag="25" Content="25 dk" Click="StartTimer_Click" />
+                            <Button Style="{StaticResource HomeChip}" Tag="60" Content="1 sa" Click="StartTimer_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Discord voice channel -->
+                <Grid x:Name="DiscordPanel" Width="300" Height="37" Opacity="0" IsHitTestVisible="False">
+                    <Border x:Name="DiscordPillIcon" Width="23" Height="23" CornerRadius="7" Background="#5865F2" HorizontalAlignment="Left" Margin="8,0,0,0">
+                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE95B;" FontSize="13" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="Sesli kanalda" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Fg}"
+                               VerticalAlignment="Center" Margin="40,0,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <Ellipse x:Name="DiscordDot" Width="8" Height="8" Fill="{StaticResource Green}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                        <TextBlock x:Name="DiscordState" FontSize="12" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Notification list -->
+                <Grid x:Name="InboxPanel" Width="400" Height="150" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="InboxContent" VerticalAlignment="Top" Margin="18,18,18,14">
+                        <Grid Margin="2,0,2,10">
+                            <TextBlock Text="Bildirimler" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button x:Name="InboxQuiet" Style="{StaticResource LinkButton}" Click="InboxQuiet_Click" Margin="0,0,14,0" />
+                                <Button Style="{StaticResource LinkButton}" Content="Temizle" Click="InboxClear_Click" />
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel x:Name="InboxList" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Calendar: month view, the chosen day's events, add an event -->
+                <Grid x:Name="CalendarPanel" Width="400" Height="400" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="CalendarContent" VerticalAlignment="Top" Margin="18,14,18,14">
+                        <Grid Margin="2,0,2,6">
+                            <TextBlock x:Name="CalendarMonth" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource IconButton}" Click="CalendarPrev_Click">
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE76B;" FontSize="11" Foreground="{DynamicResource Fg}" />
+                                </Button>
+                                <Button Style="{StaticResource IconButton}" Click="CalendarNext_Click">
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE76C;" FontSize="11" Foreground="{DynamicResource Fg}" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <UniformGrid x:Name="CalendarWeekdays" Columns="7" />
+                        <UniformGrid x:Name="CalendarDays" Columns="7" />
+                        <TextBlock x:Name="CalendarDayTitle" FontSize="12" Foreground="{DynamicResource SecondaryText}" Margin="4,10,0,6" />
+                        <StackPanel x:Name="CalendarEvents" />
+                        <Border CornerRadius="12" Background="{DynamicResource ClipBg}" Padding="12,7" Margin="0,4,0,0">
+                            <Grid>
+                                <TextBox x:Name="CalendarInput" Style="{StaticResource PlainInput}" FontSize="13"
+                                         KeyDown="CalendarInput_KeyDown" TextChanged="CalendarInput_TextChanged" />
+                                <TextBlock x:Name="CalendarHint" Text="14:30 Toplantı yaz, Enter'a bas" FontSize="13" IsHitTestVisible="False"
+                                           Foreground="{DynamicResource SecondaryText}" Margin="2,0,0,0" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                <!-- Discord card -->
+                <Grid x:Name="DiscordCard" Width="400" Height="200" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="DiscordCardContent" VerticalAlignment="Top" Margin="16,16,16,10">
+                        <Grid Margin="2,0,2,12">
+                            <Border x:Name="DiscordCardIcon" Width="40" Height="40" CornerRadius="11" Background="#5865F2" HorizontalAlignment="Left">
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE95B;" FontSize="20" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Margin="50,0,70,0" VerticalAlignment="Center">
+                                <TextBlock Text="Discord" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                                <TextBlock x:Name="DiscordCardStatus" FontSize="12" Foreground="{DynamicResource SecondaryText}" />
+                            </StackPanel>
+                            <Button Style="{StaticResource HomeChip}" Content="Aç" Click="DiscordOpen_Click" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                        <Border x:Name="DiscordCallRow" Style="{StaticResource HomeCard}" Padding="14,10" Visibility="Collapsed">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="Sesli kanalda" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                                    <TextBlock x:Name="DiscordCallTime" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"
+                                               Typography.NumeralAlignment="Tabular" HorizontalAlignment="Right" />
+                                </Grid>
+                                <Grid Height="5" Margin="0,8,0,5">
+                                    <Border Background="{DynamicResource TrackBrush}" CornerRadius="2.5" />
+                                    <Border x:Name="DiscordLevel" Width="0" HorizontalAlignment="Left" Background="{StaticResource Green}" CornerRadius="2.5" />
+                                </Grid>
+                                <TextBlock x:Name="DiscordCallState" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="DiscordUsage" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" Margin="4,0,0,9" />
+                        <StackPanel x:Name="DiscordMessages" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Five day weather forecast -->
+                <Grid x:Name="ForecastPanel" Width="400" Height="200" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="ForecastContent" VerticalAlignment="Top" Margin="20,18,20,10">
+                        <TextBlock x:Name="ForecastTitle" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" Margin="2,0,0,12" />
+                        <StackPanel x:Name="ForecastRows" />
+                    </StackPanel>
                 </Grid>
 
             </Canvas>

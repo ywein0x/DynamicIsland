@@ -160,8 +160,11 @@ public partial class MainWindow
 
     void StartTimer_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem { Tag: string minutes })
-            StartTimer(TimeSpan.FromMinutes(int.Parse(minutes)));
+        if (sender is not Button { Tag: string minutes })
+            return;
+        StartTimer(TimeSpan.FromMinutes(int.Parse(minutes)));
+        // Back to the shortcuts; the new timer now has its card on the home menu.
+        ShowAndFitChips(false);
     }
 
     void TimerPause_Click(object sender, RoutedEventArgs e)

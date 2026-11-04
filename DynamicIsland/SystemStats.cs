@@ -2,16 +2,34 @@ using System.Runtime.InteropServices;
 
 namespace DynamicIsland;
 
-public sealed record StatsSample(int CpuPercent, int RamPercent, int? GpuTemperature);
+public sealed record StatsSample(int CpuPercent, int RamPercent, int? GpuTemperature, int? GpuPercent);
 
-/// <summary>CPU and memory load from Win32, GPU temperature from NVIDIA's NVML when available.</summary>
+/// <summary>CPU and memory load from Win32, GPU temperature and load from NVIDIA's NVML when available.</summary>
 public sealed class SystemStats
 {
     long _lastIdle, _lastKernel, _lastUser;
     bool _nvmlTried;
     IntPtr _gpu;
 
-    public StatsSample Sample() => new(Cpu(), Ram(), GpuTemperature());
+    public StatsSample Sample()
+    {
+        var temperature = GpuTemperature();
+        return new(Cpu(), Ram(), temperature, GpuLoad());
+    }
+
+    int? GpuLoad()
+    {
+        if (_gpu == IntPtr.Zero)
+            return null;
+        try
+        {
+            return nvmlDeviceGetUtilizationRates(_gpu, out var rates) == 0 ? (int)rates.Gpu : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     int Cpu()
     {
@@ -73,4 +91,13 @@ public sealed class SystemStats
 
     [DllImport("nvml.dll")]
     static extern int nvmlDeviceGetTemperature(IntPtr device, int sensor, out uint temperature);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct NvmlUtilization
+    {
+        public uint Gpu, Memory;
+    }
+
+    [DllImport("nvml.dll")]
+    static extern int nvmlDeviceGetUtilizationRates(IntPtr device, out NvmlUtilization rates);
 }

@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
@@ -9,7 +11,7 @@ using Microsoft.Win32;
 namespace DynamicIsland;
 
 /// <param name="Target">An exe path, or an app id for shell:AppsFolder.</param>
-public sealed record AppUsage(string Name, string Target, bool IsExe, int Runs, TimeSpan Focus, ImageSource? Icon)
+public sealed record AppUsage(string Name, string Target, bool IsExe, int Runs, TimeSpan Focus, ImageSource? Icon, string Arguments = "")
 {
     public string FocusText => Focus.TotalHours >= 1 ? $"{Focus.TotalHours:0.#} sa"
         : Focus.TotalMinutes >= 1 ? $"{(int)Focus.TotalMinutes} dk"
@@ -22,7 +24,7 @@ public sealed record AppUsage(string Name, string Target, bool IsExe, int Runs, 
         try
         {
             if (IsExe)
-                Process.Start(new ProcessStartInfo(Target) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(Target) ?? "" });
+                Process.Start(new ProcessStartInfo(Target, Arguments) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(Target) ?? "" });
             else
                 Process.Start("explorer.exe", $"shell:AppsFolder\\{Target}");
         }
@@ -54,6 +56,40 @@ static class AppUsageReader
         ["{F38BF404-1D43-42F2-9305-67DE0B28FC23}"] = Environment.SpecialFolder.Windows,
     };
 
+    // Almost everyone's top app is a browser, which says nothing; hidden unless the user wants them.
+    static readonly Regex Browsers = new(
+        @"chrome|msedge|microsoft edge|firefox|opera|brave|vivaldi|yandex|tor browser|waterfox|librewolf|zen browser|safari|\barc\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool IsBrowser(AppUsage app) => Browsers.IsMatch(app.Name) || Browsers.IsMatch(app.Target);
+
+    /// <summary>The latest reading, for anything that needs it without waiting.</summary>
+    public static List<AppUsage> Latest { get; private set; } = [];
+
+    /// <summary>
+    /// Reads on its own thread: pulling icons from the shell takes about a second and would freeze the island.
+    /// The shell's COM objects need a single-threaded apartment, hence a real thread and not the thread pool.
+    /// </summary>
+    public static Task<List<AppUsage>> ReadInBackgroundAsync()
+    {
+        var done = new TaskCompletionSource<List<AppUsage>>();
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                Latest = Read();
+                done.SetResult(Latest);
+            }
+            catch
+            {
+                done.SetResult(Latest);
+            }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return done.Task;
+    }
+
     /// <summary>All recognizable apps, most used first.</summary>
     public static List<AppUsage> Read()
     {
@@ -81,7 +117,7 @@ static class AppUsageReader
                 if (apps.TryGetValue(app.Name, out var existing))
                     apps[app.Name] = existing with { Runs = existing.Runs + Math.Max(0, runs), Focus = existing.Focus + focus };
                 else
-                    apps[app.Name] = new AppUsage(app.Name, app.Target, app.IsExe, Math.Max(0, runs), focus, app.Icon);
+                    apps[app.Name] = app with { Runs = Math.Max(0, runs), Focus = focus };
             }
         }
         catch
@@ -109,7 +145,15 @@ static class AppUsageReader
             catch { name = ""; }
             if (name.Length == 0)
                 name = Path.GetFileNameWithoutExtension(path);
-            return new AppUsage(name, path, true, 0, TimeSpan.Zero, ShellIcons.ForParsingName(path));
+            // VALORANT's game exe has a poor icon and can't start without the Riot client.
+            var riot = Path.Combine(Path.GetPathRoot(path) ?? "", "Riot Games", "Riot Client", "RiotClientServices.exe");
+            if (path.Contains(@"\Riot Games\VALORANT\", StringComparison.OrdinalIgnoreCase) && File.Exists(riot))
+            {
+                var launcher = Path.Combine(Path.GetPathRoot(path) ?? "", "Riot Games", "VALORANT", "live", "VALORANT.exe");
+                return new AppUsage("VALORANT", riot, true, 0, TimeSpan.Zero, ShellIcons.ForExe(File.Exists(launcher) ? launcher : path),
+                    "--launch-product=valorant --launch-patchline=live");
+            }
+            return new AppUsage(name, path, true, 0, TimeSpan.Zero, ShellIcons.ForExe(path));
         }
 
         // Otherwise an app id; it only resolves if the app is still installed.
@@ -129,7 +173,7 @@ static class AppUsageReader
 /// <summary>Real, sharp icons for files and installed apps, from the Windows shell.</summary>
 static class ShellIcons
 {
-    const int IconSize = 96;
+    const int IconSize = 128;
     const int SiigbfBiggerSizeOk = 0x1;
     const int SiigbfIconOnly = 0x4;
 
@@ -137,10 +181,52 @@ static class ShellIcons
 
     public static ImageSource? ForApp(string appId) => ForParsingName("shell:AppsFolder\\" + appId);
 
+    /// <summary>
+    /// The icon embedded in an exe, at the largest size it has. The shell's own version frames small
+    /// icons in a white page and blurs them, which is what made some look broken.
+    /// </summary>
+    public static ImageSource? ForExe(string path)
+    {
+        var key = "exe:" + path;
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(key, out var cached))
+                return cached;
+        }
+        ImageSource? icon = null;
+        var handles = new IntPtr[1];
+        var ids = new uint[1];
+        try
+        {
+            if (PrivateExtractIcons(path, 0, IconSize, IconSize, handles, ids, 1, 0) == 1 && handles[0] != IntPtr.Zero)
+            {
+                var source = Imaging.CreateBitmapSourceFromHIcon(handles[0], Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                icon = source;
+            }
+        }
+        catch
+        {
+            // Falls through to the shell below.
+        }
+        finally
+        {
+            if (handles[0] != IntPtr.Zero)
+                DestroyIcon(handles[0]);
+        }
+        icon ??= ForParsingName(path);
+        lock (Cache)
+            Cache[key] = icon;
+        return icon;
+    }
+
     public static ImageSource? ForParsingName(string name)
     {
-        if (Cache.TryGetValue(name, out var cached))
-            return cached;
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(name, out var cached))
+                return cached;
+        }
         ImageSource? icon = null;
         try
         {
@@ -157,7 +243,8 @@ static class ShellIcons
         {
             // Not an item the shell knows.
         }
-        Cache[name] = icon;
+        lock (Cache)
+            Cache[name] = icon;
         return icon;
     }
 
@@ -248,6 +335,12 @@ static class ShellIcons
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
     static extern void SHCreateItemFromParsingName(string path, IntPtr context, ref Guid riid, out IShellItem item);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern uint PrivateExtractIcons(string file, int index, int width, int height, IntPtr[] icons, uint[] ids, uint count, uint flags);
+
+    [DllImport("user32.dll")]
+    static extern bool DestroyIcon(IntPtr icon);
 
     [DllImport("gdi32.dll", EntryPoint = "GetObjectW")]
     static extern int GetObject(IntPtr handle, int size, out NativeBitmap info);

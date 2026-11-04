@@ -8,7 +8,8 @@
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
         WindowStartupLocation="Manual"
         FontFamily="SF Pro Display, Segoe UI Variable Display, Segoe UI"
-        UseLayoutRounding="True">
+        UseLayoutRounding="True"
+        RenderOptions.BitmapScalingMode="HighQuality">
 
     <Window.Resources>
         <!-- Theme brushes: dark defaults, replaced at runtime by Theme.Apply -->
@@ -146,6 +147,31 @@
             </Setter>
         </Style>
 
+        <!-- "Back to the home menu" link -->
+        <Style x:Key="BackLink" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <StackPanel x:Name="Root" Orientation="Horizontal" Background="Transparent">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE76B;" FontSize="10" VerticalAlignment="Center" Margin="0,1,5,0" />
+                            <TextBlock Text="Ana menü" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Timer length on the home menu -->
         <Style x:Key="HomeChip" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
@@ -241,6 +267,16 @@
                     <Path x:Name="BubbleRingArc" Stroke="{StaticResource Orange}" StrokeThickness="2.5"
                           StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
                 </Grid>
+                <Grid x:Name="BubbleBattery" Width="26" Height="26" Visibility="Collapsed">
+                    <Ellipse Stroke="{DynamicResource TrackBrush}" StrokeThickness="2.5" />
+                    <Path x:Name="BubbleBatteryArc" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    <TextBlock x:Name="BubbleBatteryText" FontSize="9.5" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+                <StackPanel x:Name="BubbleUsage" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock x:Name="BubbleUsageName" FontSize="8" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="BubbleUsageValue" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,-2,0,0" />
+                </StackPanel>
                 <TextBlock x:Name="BubbleIcon" FontFamily="{StaticResource IconFont}" FontSize="14"
                            Foreground="{StaticResource Blue}" Text="&#xE896;" Visibility="Collapsed"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -290,7 +326,7 @@
                 </Grid>
 
                 <!-- Music, expanded: now playing card -->
-                <Grid x:Name="ExpandedMedia" Width="380" Height="180" Opacity="0" IsHitTestVisible="False">
+                <Grid x:Name="ExpandedMedia" Width="380" Height="202" Opacity="0" IsHitTestVisible="False">
                     <!-- Faint wash of the artwork's color behind the cover, nothing more -->
                     <Border>
                         <Border.Background>
@@ -301,7 +337,8 @@
                             </RadialGradientBrush>
                         </Border.Background>
                     </Border>
-                    <Grid Margin="22,22,22,14">
+                    <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="22,14,0,0" />
+                    <Grid Margin="22,38,22,12">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -366,6 +403,10 @@
                                 <Path Style="{StaticResource Glyph}" Data="M1,1 L1,15 L12,8 Z M13,1 L13,15 L24,8 Z" />
                             </Button>
                         </StackPanel>
+                        <Button Grid.Row="2" Style="{StaticResource IconButton}" Click="Heart_Click" ToolTip="Beğenilenlere ekle"
+                                HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock x:Name="MediaHeart" FontFamily="{StaticResource IconFont}" Text="&#xE006;" FontSize="17" Foreground="{DynamicResource Fg}" />
+                        </Button>
                     </Grid>
                 </Grid>
 
@@ -451,8 +492,9 @@
                 </Grid>
 
                 <!-- Timer, expanded: pause/cancel + big time -->
-                <Grid x:Name="TimerExpanded" Width="380" Height="120" Opacity="0" IsHitTestVisible="False">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Grid x:Name="TimerExpanded" Width="380" Height="146" Opacity="0" IsHitTestVisible="False">
+                    <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="22,14,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,24,0,0">
                         <Button Style="{StaticResource IconButton}" Click="TimerPause_Click">
                             <Grid Width="50" Height="50">
                                 <Ellipse Fill="{StaticResource OrangeDim}" />
@@ -473,7 +515,7 @@
                             </Grid>
                         </Button>
                     </StackPanel>
-                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,28,0">
+                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,24,28,0">
                         <TextBlock Text="Zamanlayıcı" FontSize="13" Foreground="{StaticResource Orange}" TextAlignment="Right" />
                         <TextBlock x:Name="TimerBigText" FontSize="40" FontWeight="Light" Foreground="{StaticResource Orange}"
                                    Typography.NumeralAlignment="Tabular" TextAlignment="Right" Margin="0,-4,0,0" />
@@ -524,7 +566,8 @@
 
                 <!-- Clipboard history -->
                 <Grid x:Name="ClipboardPanel" Width="380" Height="260" Opacity="0" IsHitTestVisible="False">
-                    <StackPanel Margin="20,20,20,14">
+                    <StackPanel x:Name="ClipboardContent" VerticalAlignment="Top" Margin="20,14,20,12">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="2,0,0,8" />
                         <Grid Margin="2,0,2,12">
                             <TextBlock Text="Pano" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                             <TextBlock Text="Kopyalamak için tıkla" FontSize="11" Foreground="{DynamicResource SecondaryText}"
@@ -555,8 +598,9 @@
                 </Grid>
 
                 <!-- File shelf, expanded -->
-                <Grid x:Name="ShelfPanel" Width="380" Height="170" Opacity="0" IsHitTestVisible="False">
-                    <Grid Margin="20,18,20,14">
+                <Grid x:Name="ShelfPanel" Width="380" Height="194" Opacity="0" IsHitTestVisible="False">
+                    <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="22,14,0,0" />
+                    <Grid Margin="20,38,20,14">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -616,6 +660,9 @@
                                     <TextBlock x:Name="HomeArtist" FontSize="12" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Style="{StaticResource IconButton}" Click="Heart_Click" ToolTip="Beğenilenlere ekle">
+                                        <TextBlock x:Name="HomeHeart" FontFamily="{StaticResource IconFont}" Text="&#xE006;" FontSize="15" Foreground="{DynamicResource Fg}" />
+                                    </Button>
                                     <Button Style="{StaticResource IconButton}" Click="Previous_Click" ToolTip="Önceki şarkı">
                                         <Path Style="{StaticResource Glyph}" Data="M20,1 L20,13 L11,7 Z M10,1 L10,13 L1,7 Z" />
                                     </Button>
@@ -678,13 +725,13 @@
                         </Border>
 
                         <!-- Weather and calendar side by side -->
-                        <Grid Margin="0,0,0,8">
+                        <Grid x:Name="HomeWidgets" Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="8" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Border Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeWeather_Click">
+                            <Border x:Name="HomeWeatherCard" Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeWeather_Click">
                                 <Grid>
                                     <StackPanel>
                                         <TextBlock x:Name="HomeWeatherCity" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,0,0,1" />
@@ -695,7 +742,7 @@
                                                HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Right" Margin="0,4,0,0" />
                                 </Grid>
                             </Border>
-                            <Border Grid.Column="2" Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeCalendar_Click">
+                            <Border x:Name="HomeCalendarCard" Grid.Column="2" Style="{StaticResource HomeCard}" Margin="0" Padding="13,9" Cursor="Hand" MouseLeftButtonUp="HomeCalendar_Click">
                                 <StackPanel>
                                     <TextBlock x:Name="HomeCalendarDay" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" Margin="0,0,0,3" />
                                     <TextBlock x:Name="HomeCalendarTime" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
@@ -713,18 +760,18 @@
                         </Border>
 
                         <!-- Shortcuts -->
-                        <UniformGrid x:Name="HomeTiles" Rows="1" Columns="5" Margin="0,2,0,0">
-                            <Button Style="{StaticResource IconButton}" Click="HomeTimerTile_Click">
-                                <StackPanel Width="68">
+                        <UniformGrid x:Name="HomeTiles" Rows="1" Margin="0,2,0,0">
+                            <Button Style="{StaticResource IconButton}" x:Name="TileTimer" Click="HomeTimerTile_Click">
+                                <StackPanel Width="58">
                                     <Border Width="42" Height="42" CornerRadius="12" Background="#FF9F0A">
                                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE916;" FontSize="18" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="Zamanlayıcı" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                    <TextBlock Text="Sayaç" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource IconButton}" Click="HomeInbox_Click">
-                                <StackPanel Width="68">
+                            <Button Style="{StaticResource IconButton}" x:Name="TileInbox" Click="HomeInbox_Click">
+                                <StackPanel Width="58">
                                     <Grid Width="42" Height="42">
                                         <Border CornerRadius="12" Background="#FF375F">
                                             <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xEA8F;" FontSize="18" Foreground="White"
@@ -740,8 +787,17 @@
                                     <TextBlock Text="Bildirim" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource IconButton}" Click="HomeClipboard_Click">
-                                <StackPanel Width="68">
+                            <Button Style="{StaticResource IconButton}" x:Name="TileFavorites" Click="HomeFavorites_Click">
+                                <StackPanel Width="58">
+                                    <Border Width="42" Height="42" CornerRadius="12" Background="#FF2D55">
+                                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE00B;" FontSize="18" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="Beğeniler" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource IconButton}" x:Name="TileClipboard" Click="HomeClipboard_Click">
+                                <StackPanel Width="58">
                                     <Border Width="42" Height="42" CornerRadius="12" Background="#5E5CE6">
                                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" FontSize="18" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -749,8 +805,8 @@
                                     <TextBlock Text="Pano" FontSize="11" Foreground="{DynamicResource Fg}" TextAlignment="Center" Margin="0,5,0,0" />
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource IconButton}" Click="HomeShelf_Click">
-                                <StackPanel Width="68">
+                            <Button Style="{StaticResource IconButton}" x:Name="TileShelf" Click="HomeShelf_Click">
+                                <StackPanel Width="58">
                                     <Border Width="42" Height="42" CornerRadius="12" Background="#0A84FF">
                                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8B7;" FontSize="18" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -759,7 +815,7 @@
                                 </StackPanel>
                             </Button>
                             <Button Style="{StaticResource IconButton}" Click="HomeSettings_Click">
-                                <StackPanel Width="68">
+                                <StackPanel Width="58">
                                     <Border Width="42" Height="42" CornerRadius="12" Background="#636366">
                                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE713;" FontSize="18" Foreground="White"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -800,7 +856,8 @@
 
                 <!-- Notification list -->
                 <Grid x:Name="InboxPanel" Width="400" Height="150" Opacity="0" IsHitTestVisible="False">
-                    <StackPanel x:Name="InboxContent" VerticalAlignment="Top" Margin="18,18,18,14">
+                    <StackPanel x:Name="InboxContent" VerticalAlignment="Top" Margin="18,14,18,12">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="4,0,0,8" />
                         <Grid Margin="2,0,2,10">
                             <TextBlock Text="Bildirimler" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -815,6 +872,7 @@
                 <!-- Calendar: month view, the chosen day's events, add an event -->
                 <Grid x:Name="CalendarPanel" Width="400" Height="400" Opacity="0" IsHitTestVisible="False">
                     <StackPanel x:Name="CalendarContent" VerticalAlignment="Top" Margin="18,14,18,14">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="4,0,0,6" />
                         <Grid Margin="2,0,2,6">
                             <TextBlock x:Name="CalendarMonth" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -842,7 +900,8 @@
                 </Grid>
                 <!-- Discord card -->
                 <Grid x:Name="DiscordCard" Width="400" Height="200" Opacity="0" IsHitTestVisible="False">
-                    <StackPanel x:Name="DiscordCardContent" VerticalAlignment="Top" Margin="16,16,16,10">
+                    <StackPanel x:Name="DiscordCardContent" VerticalAlignment="Top" Margin="16,14,16,10">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="6,0,0,10" />
                         <Grid Margin="2,0,2,12">
                             <Border x:Name="DiscordCardIcon" Width="40" Height="40" CornerRadius="11" Background="#5865F2" HorizontalAlignment="Left">
                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE95B;" FontSize="20" Foreground="White"
@@ -875,9 +934,22 @@
 
                 <!-- Five day weather forecast -->
                 <Grid x:Name="ForecastPanel" Width="400" Height="200" Opacity="0" IsHitTestVisible="False">
-                    <StackPanel x:Name="ForecastContent" VerticalAlignment="Top" Margin="20,18,20,10">
+                    <StackPanel x:Name="ForecastContent" VerticalAlignment="Top" Margin="20,14,20,10">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="2,0,0,8" />
                         <TextBlock x:Name="ForecastTitle" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" Margin="2,0,0,12" />
                         <StackPanel x:Name="ForecastRows" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Liked songs -->
+                <Grid x:Name="FavoritesPanel" Width="400" Height="150" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel x:Name="FavoritesContent" VerticalAlignment="Top" Margin="18,14,18,12">
+                        <Button Style="{StaticResource BackLink}" Click="Back_Click" Margin="4,0,0,8" />
+                        <Grid Margin="2,0,2,10">
+                            <TextBlock Text="Beğenilen şarkılar" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" />
+                            <TextBlock x:Name="FavoritesCount" FontSize="11.5" Foreground="{DynamicResource SecondaryText}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                        <StackPanel x:Name="FavoritesList" />
                     </StackPanel>
                 </Grid>
 

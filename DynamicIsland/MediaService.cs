@@ -15,7 +15,8 @@ public sealed record MediaState(
     bool IsPlaying,
     TimeSpan Position,
     TimeSpan Duration,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string AppId = "");
 
 /// <summary>
 /// Follows whatever Windows shows in its media flyout (Spotify, browsers, Apple Music, ...).
@@ -122,7 +123,8 @@ public sealed class MediaService
                 session.GetPlaybackInfo().PlaybackStatus == PlaybackStatus.Playing,
                 timeline.Position,
                 timeline.EndTime - timeline.StartTime,
-                timeline.LastUpdatedTime));
+                timeline.LastUpdatedTime,
+                session.SourceAppUserModelId));
         }
         catch
         {
@@ -142,6 +144,8 @@ public sealed class MediaService
     /// </summary>
     static bool IsMusic(string appId, GlobalSystemMediaTransportControlsSessionMediaProperties props)
     {
+        if (Settings.Get(Feature.ShowVideos, fallback: false))
+            return true;
         var app = appId.ToLowerInvariant();
         if (MusicApps.Any(app.Contains))
             return true;

@@ -15,15 +15,15 @@ sealed class TrayIcon : IDisposable
     readonly Forms.ToolStripMenuItem _autostart;
     readonly IntPtr _iconHandle;
 
-    public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action checkUpdates, Action exit)
+    public TrayIcon(Action openHome, Action openSettings, Action openClipboard, Action openShelf, Action checkUpdates, Action exit)
     {
         _iconHandle = DrawIcon();
         _autostart = new Forms.ToolStripMenuItem("Windows ile başlat") { CheckOnClick = true };
         _autostart.Click += (_, _) => Autostart.IsEnabled = _autostart.Checked;
 
         var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add("Ana menü", null, (_, _) => openHome());
         menu.Items.Add("Ayarlar", null, (_, _) => openSettings());
-
         menu.Items.Add("Pano geçmişi", null, (_, _) => openClipboard());
         menu.Items.Add("Dosya rafı", null, (_, _) => openShelf());
         menu.Items.Add(new Forms.ToolStripSeparator());

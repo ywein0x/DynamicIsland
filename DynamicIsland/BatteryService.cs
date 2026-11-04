@@ -19,6 +19,11 @@ public sealed class BatteryService
     /// <summary>Current charge, or null on machines without a battery.</summary>
     public int? CurrentPercent => Read(Battery.AggregateBattery.GetReport()).Percent;
 
+    public bool CurrentlyCharging => Read(Battery.AggregateBattery.GetReport()).Charging;
+
+    /// <summary>Anything about the battery changed.</summary>
+    public event Action? Updated;
+
     public void Start()
     {
         var battery = Battery.AggregateBattery;
@@ -33,6 +38,7 @@ public sealed class BatteryService
     void Check(Battery battery)
     {
         var (charging, percent) = Read(battery.GetReport());
+        Updated?.Invoke();
         if (charging && !_charging && percent is { } p)
             ChargingStarted?.Invoke(p);
         _charging = charging;

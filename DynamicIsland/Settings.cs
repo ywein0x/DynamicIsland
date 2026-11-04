@@ -21,6 +21,32 @@ static class Feature
 
 
     public const string DiscordActivity = "DiscordActivity";
+
+    // Appearance
+    public const string SoftEntrance = "SoftEntrance";
+    public const string Shadow = "Shadow";
+
+    // Home menu
+    public const string HomeWeather = "HomeWeather";
+    public const string HomeCalendar = "HomeCalendar";
+    public const string HomeApps = "HomeApps";
+    public const string TileTimer = "TileTimer";
+    public const string TileInbox = "TileInbox";
+    public const string TileFavorites = "TileFavorites";
+    public const string TileClipboard = "TileClipboard";
+    public const string TileShelf = "TileShelf";
+    public const string HideBrowsers = "HideBrowsers";
+
+    // Music
+    public const string MusicFlash = "MusicFlash";
+    public const string ShowVideos = "ShowVideos";
+
+
+    // Notifications and sounds
+    public const string BatteryBubble = "BatteryBubble";
+    public const string UsageWarning = "UsageWarning";
+    public const string HideNotificationText = "HideNotificationText";
+    public const string TimerSound = "TimerSound";
 }
 
 /// <summary>User preferences, stored under HKCU\Software\DynamicIsland.</summary>
@@ -88,6 +114,92 @@ static class Settings
     {
         get => GetString(nameof(IslandCorners), "normal");
         set => SetString(nameof(IslandCorners), value);
+    }
+
+    /// <summary>"fast", "normal", "slow" or "off": how long the pointer rests on the top edge before the island appears.</summary>
+    public static string RevealDelay
+    {
+        get => GetString(nameof(RevealDelay), "normal");
+        set => SetString(nameof(RevealDelay), value);
+    }
+
+    /// <summary>"0", "8" or "16": pixels between the top of the screen and the island.</summary>
+    public static string IslandGap
+    {
+        get => GetString(nameof(IslandGap), "8");
+        set => SetString(nameof(IslandGap), value);
+    }
+
+    /// <summary>"calm", "normal" or "fast".</summary>
+    public static string AnimationSpeed
+    {
+        get => GetString(nameof(AnimationSpeed), "normal");
+        set => SetString(nameof(AnimationSpeed), value);
+    }
+
+    /// <summary>Seconds the music pill stays after a song change.</summary>
+    public static string MusicFlashSeconds
+    {
+        get => GetString(nameof(MusicFlashSeconds), "4");
+        set => SetString(nameof(MusicFlashSeconds), value);
+    }
+
+    /// <summary>Seconds a notification banner stays.</summary>
+    public static string BannerSeconds
+    {
+        get => GetString(nameof(BannerSeconds), "5");
+        set => SetString(nameof(BannerSeconds), value);
+    }
+
+    /// <summary>"off", "22-08" or "00-08": hours when Do Not Disturb turns itself on.</summary>
+    public static string QuietHours
+    {
+        get => GetString(nameof(QuietHours), "off");
+        set => SetString(nameof(QuietHours), value);
+    }
+
+    /// <summary>Do Not Disturb right now, by the switch or the quiet hours.</summary>
+    public static bool QuietNow
+    {
+        get
+        {
+            if (DoNotDisturb)
+                return true;
+            var hour = DateTime.Now.Hour;
+            return QuietHours switch { "22-08" => hour >= 22 || hour < 8, "00-08" => hour < 8, _ => false };
+        }
+    }
+
+    /// <summary>The user's own Spotify app; empty means not connected.</summary>
+    public static string SpotifyClientId
+    {
+        get => GetString(nameof(SpotifyClientId), "");
+        set => SetString(nameof(SpotifyClientId), value);
+    }
+
+    /// <summary>How many copied texts to remember.</summary>
+    public static string ClipboardSize
+    {
+        get => GetString(nameof(ClipboardSize), "5");
+        set => SetString(nameof(ClipboardSize), value);
+    }
+
+    /// <summary>How many apps the home menu shows.</summary>
+    public static string TopAppCount
+    {
+        get => GetString(nameof(TopAppCount), "5");
+        set => SetString(nameof(TopAppCount), value);
+    }
+
+    public static bool IsAppHidden(string app) => Get("HideApp." + app, fallback: false);
+
+    public static void SetAppHidden(string app, bool hidden) => Set("HideApp." + app, hidden);
+
+    /// <summary>Back to defaults; starting with Windows is stored elsewhere and stays as it is.</summary>
+    public static void ResetAll()
+    {
+        Clear();
+        Changed?.Invoke();
     }
 
     /// <summary>City for the home menu's weather card.</summary>

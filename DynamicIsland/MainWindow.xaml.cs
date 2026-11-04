@@ -17,8 +17,8 @@ namespace DynamicIsland;
 public partial class MainWindow : Window
 {
     enum Transient { None, Volume, Battery, Notification, Lock, Screenshot, DownloadDone, Privacy, Game, Update, Calendar }
-    enum ExpandKind { None, Media, Timer, Clipboard, Shelf, Home, Calendar, Inbox, Discord, Forecast }
-    enum BubbleKind { None, Media, Timer, Download }
+    enum ExpandKind { None, Media, Timer, Clipboard, Shelf, Home, Calendar, Inbox, Discord, Forecast, Favorites }
+    enum BubbleKind { None, Media, Timer, Download, Battery, Usage }
 
     sealed record PendingTransient(Transient Kind, TimeSpan Duration, Action Apply, DateTime Since);
 
@@ -27,9 +27,14 @@ public partial class MainWindow : Window
     const double PillRadius = PillHeight / 2;
     const double BubbleGap = 6;
 
+    // A page opened from the home menu is usually smaller, so the pointer ends up outside it.
+    // It gets this long to reach the page before the page closes.
+    static readonly TimeSpan ReachPageTime = TimeSpan.FromSeconds(8);
+    static readonly TimeSpan CollapseDelay = TimeSpan.FromMilliseconds(450);
+
     // Top-edge reveal: the pointer has to rest in this strip, without clicking, before the island peeks out.
     const double PeekZoneHalfWidth = 90;
-    static readonly TimeSpan PeekDwell = TimeSpan.FromMilliseconds(600);
+    static TimeSpan PeekDwell => TimeSpan.FromMilliseconds(Settings.RevealDelay switch { "fast" => 300, "slow" => 1000, _ => 600 });
 
     // Swipe sideways farther than this to dismiss.
     const double SwipeDismissDistance = 70;
@@ -74,6 +79,8 @@ public partial class MainWindow : Window
     SettingsWindow? _settingsWindow;
     UpdateRelease? _update;
 
+    DateTime _reachPageUntil;
+
     bool Expanded => _expand != ExpandKind.None;
 
     /// <summary>Pills are skipped while a card is open or a game/fullscreen video is in front.</summary>
@@ -89,10 +96,11 @@ public partial class MainWindow : Window
         _panels =
         [
             CompactMedia, ExpandedMedia, VolumePanel, BatteryPanel, LockPanel, InfoPanel, StatsPanel, TimerCompact, TimerExpanded,
-            NotificationPanel, ScreenshotPanel, ClipboardPanel, DownloadPanel, ShelfCompact, ShelfPanel, HomePanel, DiscordPanel, DiscordCard, InboxPanel, CalendarPanel, ForecastPanel,
+            NotificationPanel, ScreenshotPanel, ClipboardPanel, DownloadPanel, ShelfCompact, ShelfPanel, HomePanel, DiscordPanel, DiscordCard, InboxPanel, CalendarPanel, ForecastPanel, FavoritesPanel,
         ];
         foreach (var panel in _panels)
         {
+            panel.Visibility = Visibility.Hidden; // shown when switched to; hidden panels cost nothing to draw
             panel.RenderTransformOrigin = new Point(0.5, 0.5);
             panel.RenderTransform = new ScaleTransform();
         }
@@ -104,9 +112,18 @@ public partial class MainWindow : Window
         _collapseTimer.Tick += (_, _) =>
         {
             _collapseTimer.Stop();
+            _collapseTimer.Interval = CollapseDelay;
             // The calendar has a text box; it closes on click-away instead.
-            if (!Island.IsMouseOver && !_dragInside && _expand != ExpandKind.Calendar)
-                Expand(ExpandKind.None);
+            if (Island.IsMouseOver || _dragInside || _expand == ExpandKind.Calendar)
+                return;
+            var wait = _reachPageUntil - DateTime.Now;
+            if (wait > TimeSpan.Zero)
+            {
+                _collapseTimer.Interval = wait;
+                _collapseTimer.Start();
+                return;
+            }
+            Expand(ExpandKind.None);
         };
         _peekHideTimer.Tick += (_, _) =>
         {
@@ -150,10 +167,14 @@ public partial class MainWindow : Window
         StartMedia();
         StartSystem();
         StartCalendar();
+        _appUsageAt = DateTime.Now;
+        _ = LoadAppUsageAsync();
+        // NVIDIA's library takes a moment to load the first time.
+        _ = Task.Run(() => _stats.Sample());
         StartDiscord();
         _tray = new TrayIcon(
+            OpenHome,
             OpenSettings,
-
             () => Expand(ExpandKind.Clipboard),
             () => Expand(ExpandKind.Shelf),
             () => _ = CheckForUpdatesAsync(manual: true),
@@ -185,6 +206,10 @@ public partial class MainWindow : Window
         Theme.Apply(Resources);
         Marquee.Enabled = Settings.Get(Feature.Marquee);
         ApplyAppearance();
+        if (SpotifyClient.Connected != _spotifyConnected && _state is { } playing)
+            _ = SyncSpotifyAsync(playing);
+        if (_appUsage.Count > 0)
+            BuildAppTiles();
         CompactTitle.Restart();
         TitleText.Restart();
         Refresh();
@@ -219,14 +244,16 @@ public partial class MainWindow : Window
             (w, h, r, shadow, panel) = (400, DiscordCard.Height, 32, 0.5, DiscordCard);
         else if (_expand == ExpandKind.Forecast)
             (w, h, r, shadow, panel) = (400, ForecastPanel.Height, 32, 0.5, ForecastPanel);
+        else if (_expand == ExpandKind.Favorites)
+            (w, h, r, shadow, panel) = (400, FavoritesPanel.Height, 32, 0.5, FavoritesPanel);
         else if (_expand == ExpandKind.Timer)
-            (w, h, r, shadow, panel) = (380, 120, 44, 0.5, TimerExpanded);
+            (w, h, r, shadow, panel) = (380, TimerExpanded.Height, 44, 0.5, TimerExpanded);
         else if (_expand == ExpandKind.Media)
-            (w, h, r, shadow, panel) = (380, 180, 44, 0.5, ExpandedMedia);
+            (w, h, r, shadow, panel) = (380, ExpandedMedia.Height, 44, 0.5, ExpandedMedia);
         else if (_expand == ExpandKind.Clipboard)
-            (w, h, r, shadow, panel) = (380, 260, 40, 0.5, ClipboardPanel);
+            (w, h, r, shadow, panel) = (380, ClipboardPanel.Height, 40, 0.5, ClipboardPanel);
         else if (_expand == ExpandKind.Shelf)
-            (w, h, r, shadow, panel) = (380, 170, 40, 0.5, ShelfPanel);
+            (w, h, r, shadow, panel) = (380, ShelfPanel.Height, 40, 0.5, ShelfPanel);
         else if (_transient == Transient.Notification)
             (w, h, r, shadow, panel) = (360, 74, 30, 0.35, NotificationPanel);
         else if (_transient == Transient.Screenshot)
@@ -266,7 +293,7 @@ public partial class MainWindow : Window
         _width.Target = w;
         _height.Target = h;
         _radius.Target = r * CornerFactor;
-        _shadow.Target = shadow;
+        _shadow.Target = Settings.Get(Feature.Shadow) ? shadow : 0;
 
         // Hidden unless there is something to show, so it never sits on top of browser tabs.
         var visible = !_fullscreen
@@ -277,18 +304,21 @@ public partial class MainWindow : Window
         if (panel != _panel)
             SwitchPanel(panel);
 
-        UpdateBubble(visible);
-
         _progressTimer.IsEnabled = _expand == ExpandKind.Media;
-        if (_panel == StatsPanel && !_statsTimer.IsEnabled)
+        // The warning circle needs readings whenever the island is revealed, not only on the stats pill.
+        var wantStats = _panel == StatsPanel || Revealed;
+        if (wantStats && !_statsTimer.IsEnabled)
         {
             ShowStats();
             _statsTimer.Start();
         }
-        else if (_panel != StatsPanel)
+        else if (!wantStats)
         {
             _statsTimer.Stop();
         }
+
+        // After the readings above, so a warning is there the moment the island appears.
+        UpdateBubble(visible);
 
         if (BarsActive && Settings.Get(Feature.RealWaveform))
             _visualizer.Start();
@@ -299,6 +329,9 @@ public partial class MainWindow : Window
     }
 
     bool BarsActive => _state?.IsPlaying == true && (_panel == CompactMedia || _panel == ExpandedMedia);
+
+    /// <summary>The pointer brought the island out, and nothing bigger is on it.</summary>
+    bool Revealed => (_peek || _hover && !_hoverSuppressed) && !Expanded && _transient == Transient.None;
 
     /// <summary>A second live activity sits in a small circle beside the pill, like iOS.</summary>
     void UpdateBubble(bool visible)
@@ -312,19 +345,40 @@ public partial class MainWindow : Window
         else if (_panel == CompactMedia)
             kind = TimerActive ? BubbleKind.Timer : downloadOn ? BubbleKind.Download : BubbleKind.None;
 
+        // Only when the pointer brought the island out, so these never sit on the screen by themselves.
+        if (Revealed)
+        {
+            if (Settings.Get(Feature.UsageWarning) && _usageWarning != null)
+                kind = BubbleKind.Usage;
+            else if (kind == BubbleKind.None && Settings.Get(Feature.BatteryBubble) && _batteryLevel is { } level)
+                ShowBatteryBubble(level, _batteryCharging, ref kind);
+        }
+
         _bubbleKind = kind;
         _bubble.Target = visible && kind != BubbleKind.None ? 1 : 0;
 
         BubbleArtCircle.Visibility = kind == BubbleKind.Media ? Visibility.Visible : Visibility.Collapsed;
         BubbleRing.Visibility = kind == BubbleKind.Timer ? Visibility.Visible : Visibility.Collapsed;
         BubbleIcon.Visibility = kind == BubbleKind.Download ? Visibility.Visible : Visibility.Collapsed;
+        BubbleBattery.Visibility = kind == BubbleKind.Battery ? Visibility.Visible : Visibility.Collapsed;
+        BubbleUsage.Visibility = kind == BubbleKind.Usage ? Visibility.Visible : Visibility.Collapsed;
+        Bubble.ToolTip = kind == BubbleKind.Usage ? _usageWarning?.Detail : kind == BubbleKind.Battery ? BatteryBubbleTip() : null;
+        if (kind == BubbleKind.Usage && _usageWarning is { } warning)
+        {
+            BubbleUsageName.Text = warning.Name;
+            BubbleUsageValue.Text = warning.Value;
+            var brush = new SolidColorBrush(warning.Critical ? RedColor : OrangeColor);
+            BubbleUsageName.Foreground = BubbleUsageValue.Foreground = brush;
+        }
         if (kind == BubbleKind.Media)
             BubbleArt.ImageSource = CompactArt.ImageSource;
     }
 
     void Expand(ExpandKind kind)
     {
-
+        _collapseTimer.Stop();
+        _collapseTimer.Interval = CollapseDelay;
+        _reachPageUntil = default;
         if (_expand == ExpandKind.Calendar && kind != ExpandKind.Calendar)
             AcceptKeyboard(false);
         _expand = kind;
@@ -447,11 +501,22 @@ public partial class MainWindow : Window
                 continue;
 
             panel.IsHitTestVisible = on;
-            panel.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, TimeSpan.FromMilliseconds(on ? 300 : 120))
+            if (on)
+                panel.Visibility = Visibility.Visible;
+            var fade = new DoubleAnimation(on ? 1 : 0, TimeSpan.FromMilliseconds(on ? 300 : 120))
             {
                 BeginTime = TimeSpan.FromMilliseconds(on ? 90 : 0),
                 EasingFunction = ease,
-            });
+            };
+            if (!on)
+            {
+                fade.Completed += (_, _) =>
+                {
+                    if (panel != _panel)
+                        panel.Visibility = Visibility.Hidden;
+                };
+            }
+            panel.BeginAnimation(OpacityProperty, fade);
 
             if (!on)
                 continue;
@@ -465,7 +530,9 @@ public partial class MainWindow : Window
             scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
             scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
 
-            // Content comes into focus as it appears.
+            // Content comes into focus as it appears. Only small pills: blurring a whole page costs frames.
+            if (panel.Height > PillHeight * 2.5 || !Settings.Get(Feature.SoftEntrance))
+                continue;
             var blur = new BlurEffect { Radius = 10, RenderingBias = RenderingBias.Performance };
             panel.Effect = blur;
             var sharpen = new DoubleAnimation(0, TimeSpan.FromMilliseconds(320))
@@ -566,6 +633,8 @@ public partial class MainWindow : Window
 
         foreach (var panel in _panels)
         {
+            if (panel.Visibility != Visibility.Visible)
+                continue;
             Canvas.SetLeft(panel, (w - panel.Width) / 2);
             Canvas.SetTop(panel, (h - panel.Height) / 2);
         }
@@ -629,7 +698,7 @@ public partial class MainWindow : Window
             _dwell = TimeSpan.Zero;
             _peekSuppressed = true;
         }
-        else if (!_peekSuppressed && !_peek)
+        else if (!_peekSuppressed && !_peek && Settings.RevealDelay != "off")
         {
             _dwell += _cursorTimer.Interval;
             if (_dwell >= PeekDwell)
@@ -678,6 +747,8 @@ public partial class MainWindow : Window
     {
         _hover = true;
         _collapseTimer.Stop();
+        _collapseTimer.Interval = CollapseDelay;
+        _reachPageUntil = default; // arrived: from here on, leaving closes it as usual
         _peekHideTimer.Stop();
         Refresh();
     }
@@ -828,6 +899,12 @@ public partial class MainWindow : Window
             case BubbleKind.Download:
                 OpenDownloadsFolder();
                 break;
+            case BubbleKind.Battery:
+                OpenBatterySettings();
+                break;
+            case BubbleKind.Usage:
+                OpenTaskManager();
+                break;
         }
     }
 
@@ -859,6 +936,16 @@ public partial class MainWindow : Window
         Height = 480 * scale;
         Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
         Top = 0;
+
+        var gap = int.Parse(Settings.IslandGap);
+        Island.Margin = Bubble.Margin = new Thickness(0, gap, 0, 0);
+
+        var (stiffness, damping) = Settings.AnimationSpeed switch { "calm" => (170.0, 21.0), "fast" => (430.0, 34.0), _ => (280.0, 26.0) };
+        foreach (var spring in new[] { _width, _height, _radius, _shadow, _visible })
+        {
+            spring.Stiffness = stiffness;
+            spring.Damping = damping;
+        }
     }
     // ---------- Win32 ----------
 

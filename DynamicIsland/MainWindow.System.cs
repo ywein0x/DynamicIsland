@@ -19,7 +19,7 @@ public partial class MainWindow
     static readonly Color OrangeColor = Color.FromRgb(0xFF, 0x9F, 0x0A);
     static readonly Color RedColor = Color.FromRgb(0xFF, 0x45, 0x3A);
     static readonly Color BlueColor = Color.FromRgb(0x0A, 0x84, 0xFF);
-    const int ClipHistorySize = 5;
+
 
     // Fullscreen apps that aren't games: no "session ended" summary for these.
     static readonly string[] NotGames =
@@ -41,12 +41,23 @@ public partial class MainWindow
     ToastInfo? _lastToast;
     bool _ignoreNextClipboard;
     byte[]? _shotPng;
+    int? _batteryLevel;
+    bool _batteryCharging;
+    UsageWarning? _usageWarning;
+
+    /// <summary>What the warning circle shows.</summary>
+    sealed record UsageWarning(string Name, string Value, string Detail, bool Critical);
+
+    // Warn from these up, and stop a little below so it doesn't flicker on the edge.
+    const int UsageWarnAt = 90, UsageClearAt = 85, UsageCriticalAt = 97;
+    const int GpuHotAt = 85, GpuHotClearAt = 80;
 
     void InitSystem()
     {
         _volume.Changed += OnVolumeChanged;
         _battery.ChargingStarted += ShowCharging;
         _battery.LowBattery += ShowLowBattery;
+        _battery.Updated += ReadBattery;
         _notifications.Received += OnNotification;
         _locks.Toggled += OnLockToggled;
         _privacy.Started += OnPrivacyStarted;
@@ -75,7 +86,15 @@ public partial class MainWindow
     void StartSystem()
     {
         try { _volume.Start(); } catch { /* no audio endpoint */ }
-        try { _battery.Start(); } catch { /* no battery API */ }
+        try
+        {
+            _battery.Start();
+            ReadBattery();
+        }
+        catch
+        {
+            // No battery API.
+        }
         try { _notifications.Start(); } catch { /* notification store unreadable */ }
         try { _locks.Start(); } catch { /* hook refused */ }
         try { _downloads.Start(); } catch { /* no Downloads folder */ }
@@ -150,6 +169,37 @@ public partial class MainWindow
         });
     }
 
+    void ReadBattery()
+    {
+        _batteryLevel = _battery.CurrentPercent;
+        _batteryCharging = _battery.CurrentlyCharging;
+        if (Revealed)
+            Refresh();
+    }
+
+    void ShowBatteryBubble(int level, bool charging, ref BubbleKind kind)
+    {
+        kind = BubbleKind.Battery;
+        var color = charging ? GreenColor : level <= 20 ? RedColor : Colors.White;
+        BubbleBatteryArc.Stroke = BubbleBatteryText.Foreground = new SolidColorBrush(color);
+        BubbleBatteryArc.Data = RingArc(13, 13, 11.75, level / 100.0);
+        BubbleBatteryText.Text = level.ToString();
+    }
+
+    string BatteryBubbleTip() => _batteryCharging ? $"Şarj oluyor: %{_batteryLevel}" : $"Pil: %{_batteryLevel}";
+
+    static void OpenBatterySettings()
+    {
+        try { Process.Start(new ProcessStartInfo("ms-settings:batterysaver") { UseShellExecute = true }); }
+        catch { /* settings page unavailable */ }
+    }
+
+    static void OpenTaskManager()
+    {
+        try { Process.Start(new ProcessStartInfo("taskmgr") { UseShellExecute = true }); }
+        catch { /* blocked by policy */ }
+    }
+
     // ---------- Caps Lock / Num Lock ----------
 
     void OnLockToggled(string name, bool on)
@@ -192,20 +242,22 @@ public partial class MainWindow
         if (Settings.IsAppMuted(toast.App))
             return;
         AddToInbox(toast);
-        if (Settings.DoNotDisturb)
+        if (Settings.QuietNow)
             return;
 
         // A second banner while one is up gets a little nudge instead of a fresh entrance.
         if (_transient == Transient.Notification)
             _height.Velocity += 120;
 
-        ShowTransient(Transient.Notification, TimeSpan.FromSeconds(5), () =>
+        ShowTransient(Transient.Notification, TimeSpan.FromSeconds(int.Parse(Settings.BannerSeconds)), () =>
         {
             _lastToast = toast;
             NotifApp.Text = toast.App;
-            NotifTitle.Text = toast.Title;
-            NotifBody.Text = toast.Body;
-            NotifBody.Visibility = toast.Body.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // Private mode: who sent it stays hidden too, in case someone is looking at the screen.
+            var hidden = Settings.Get(Feature.HideNotificationText, fallback: false);
+            NotifTitle.Text = hidden ? "Yeni bildirim" : toast.Title;
+            NotifBody.Text = hidden ? "" : toast.Body;
+            NotifBody.Visibility = !hidden && toast.Body.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             // The notification's own picture, or the app's real icon; the letter is the last resort.
             var picture = toast.Icon ?? ShellIcons.ForApp(toast.AppId);
             NotifIcon.ImageSource = picture;
@@ -264,6 +316,31 @@ public partial class MainWindow
         var hasGpu = sample.GpuTemperature != null;
         GpuLabel.Visibility = GpuText.Visibility = hasGpu ? Visibility.Visible : Visibility.Collapsed;
         GpuText.Text = hasGpu ? $"{sample.GpuTemperature}°" : "";
+
+        var warning = WarningFrom(sample, _usageWarning);
+        if (warning != _usageWarning)
+        {
+            _usageWarning = warning;
+            Refresh();
+        }
+    }
+
+    /// <summary>The most pressing thing running high, or null when everything is fine.</summary>
+    static UsageWarning? WarningFrom(StatsSample s, UsageWarning? current)
+    {
+        // Already warning about it: keep going until it has clearly come back down.
+        bool High(int? value, string name, int warnAt, int clearAt) =>
+            value >= (current?.Name == name ? clearAt : warnAt);
+
+        if (High(s.RamPercent, "RAM", UsageWarnAt, UsageClearAt))
+            return new("RAM", s.RamPercent.ToString(), $"RAM çok dolu: %{s.RamPercent}. Görev Yöneticisi için tıkla", s.RamPercent >= UsageCriticalAt);
+        if (High(s.GpuTemperature, "GPU°", GpuHotAt, GpuHotClearAt))
+            return new("GPU°", s.GpuTemperature.ToString()!, $"Ekran kartı çok sıcak: {s.GpuTemperature}°. Görev Yöneticisi için tıkla", true);
+        if (High(s.GpuPercent, "GPU", UsageWarnAt, UsageClearAt))
+            return new("GPU", s.GpuPercent.ToString()!, $"Ekran kartı kullanımı yüksek: %{s.GpuPercent}. Görev Yöneticisi için tıkla", s.GpuPercent >= UsageCriticalAt);
+        if (High(s.CpuPercent, "CPU", UsageWarnAt, UsageClearAt))
+            return new("CPU", s.CpuPercent.ToString(), $"İşlemci kullanımı yüksek: %{s.CpuPercent}. Görev Yöneticisi için tıkla", s.CpuPercent >= UsageCriticalAt);
+        return null;
     }
 
     // ---------- Updates ----------
@@ -409,7 +486,7 @@ public partial class MainWindow
             return;
         _clipHistory.Remove(text);
         _clipHistory.Insert(0, text);
-        if (_clipHistory.Count > ClipHistorySize)
+        while (_clipHistory.Count > int.Parse(Settings.ClipboardSize))
             _clipHistory.RemoveAt(_clipHistory.Count - 1);
     }
 
@@ -426,6 +503,7 @@ public partial class MainWindow
             };
             empty.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
             ClipList.Children.Add(empty);
+            FitClipboard();
             return;
         }
 
@@ -441,6 +519,14 @@ public partial class MainWindow
             item.Click += ClipItem_Click;
             ClipList.Children.Add(item);
         }
+        FitClipboard();
+    }
+
+    void FitClipboard()
+    {
+        ClipboardContent.Measure(new Size(ClipboardPanel.Width, double.PositiveInfinity));
+        ClipboardPanel.Height = Math.Ceiling(ClipboardContent.DesiredSize.Height);
+        Refresh();
     }
 
     void ClipItem_Click(object sender, RoutedEventArgs e)

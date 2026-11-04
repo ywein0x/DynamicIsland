@@ -40,11 +40,15 @@ public partial class MainWindow
         var artChanged = !ReferenceEquals(state?.Art, _state?.Art);
         var noteworthy = state != null
                          && (state.Title != _state?.Title || state.Artist != _state?.Artist || state.IsPlaying != _state?.IsPlaying);
+        var songChanged = state != null && (state.Title != _state?.Title || state.Artist != _state?.Artist);
         _state = state;
+        if (songChanged)
+            _ = SyncSpotifyAsync(state!);
 
-        if (noteworthy && !_fullscreen)
+        if (noteworthy && !_fullscreen && Settings.Get(Feature.MusicFlash))
         {
             _mediaFlash = true;
+            _mediaFlashTimer.Interval = TimeSpan.FromSeconds(int.Parse(Settings.MusicFlashSeconds));
             _mediaFlashTimer.Stop();
             _mediaFlashTimer.Start();
         }
@@ -54,6 +58,7 @@ public partial class MainWindow
             CompactTitle.Text = state.Title;
             TitleText.Text = state.Title;
             ArtistText.Text = state.Artist;
+            UpdateHearts();
             PlayIcon.Visibility = state.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
             PauseIcon.Visibility = state.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
 

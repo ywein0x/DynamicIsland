@@ -10,7 +10,8 @@ iPhone'daki Dynamic Island'ın Windows için açık kaynaklı hali. Ekranın üs
 - O an olanlar: çalan müzik (önceki, oynat/durdur, sonraki), zamanlayıcı, indirme, Discord; boştayken saat ve sistem durumu
 - Hava durumu kartı ve 5 günlük tahmin
 - Takvim kartı: Windows takvimi ve adadan eklenen etkinlikler, 10 dakika önce hatırlatma
-- En çok kullanılan 5 uygulama: gerçek ikonu, kaç saat kullanıldığı ve kaç kez açıldığı, tek tıkla açma
+- En çok kullanılan uygulamalar: gerçek ikonu, kaç saat kullanıldığı ve kaç kez açıldığı, tek tıkla açma; tarayıcılar listede yer almaz, istediğin uygulamayı listeden kaldırabilirsin
+- Beğenilen şarkılar: çalan şarkının kalbine basınca listeye eklenir; Spotify hesabı bağlanırsa (Ayarlar › Müzik) Spotify'daki Beğenilenler ile birlikte çalışır
 
 **Müzik:** kapak, kayan şarkı adı, çalan sese göre hareket eden çubuklar, sürükleyerek sarma. YouTube videoları ve Shorts adayı açmaz.
 
@@ -36,9 +37,10 @@ Hesap yok, reklam yok, kullanım verisi toplanmaz. Her şey bilgisayarında kal�
 
 - **Bildirimler** Windows'un kendi bildirim kaydından okunur ve bellekte tutulur.
 - **En çok kullanılanlar** Windows'un UserAssist kaydından okunur. Sadece Windows'un kaydettiği açılışları ve süreleri gösterir; başka yollarla başlatılan programların sayıları eksik olabilir.
+- **Beğenilen şarkılar** sadece bu bilgisayarda, `%LocalAppData%\DynamicIsland\favorites` klasöründe tutulur.
 - **Pano geçmişi** sadece bellekte tutulur; şifre yöneticilerinin işaretlediği içerik kaydedilmez.
 
-İnternete sadece şunlar için çıkar: seçtiğin şehrin adıyla hava durumu (Open-Meteo) ve yeni sürüm denetimi (GitHub).
+İnternete sadece şunlar için çıkar: seçtiğin şehrin adıyla hava durumu (Open-Meteo), yeni sürüm denetimi (GitHub) ve Spotify'ı bağladıysan beğeniler (Spotify). Spotify girişi bu bilgisayarda, bu Windows kullanıcısına şifreli olarak tutulur.
 
 ## Geliştirme
 

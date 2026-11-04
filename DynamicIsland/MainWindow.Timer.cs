@@ -119,6 +119,8 @@ public partial class MainWindow
 
     void PlayAlarm()
     {
+        if (!Settings.Get(Feature.TimerSound))
+            return;
         var wav = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"Media\Alarm01.wav");
         try
         {

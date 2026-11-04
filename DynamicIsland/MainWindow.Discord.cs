@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace DynamicIsland;
@@ -19,6 +20,7 @@ public partial class MainWindow
     const int InboxSize = 30;
     const int InboxShown = 6;
     const int DiscordMessagesShown = 3;
+    const double RowSwipeDistance = 90;
 
     sealed record InboxItem(ToastInfo Toast, DateTime At);
 
@@ -220,7 +222,7 @@ public partial class MainWindow
 
     void BuildInbox()
     {
-        InboxQuiet.Content = Settings.DoNotDisturb ? "Rahatsız Etme: Açık" : "Rahatsız Etme: Kapalı";
+        InboxQuiet.Content = Settings.QuietNow ? "Rahatsız Etme: Açık" : "Rahatsız Etme: Kapalı";
         InboxList.Children.Clear();
         if (_inbox.Count == 0)
         {
@@ -295,15 +297,99 @@ public partial class MainWindow
         Grid.SetColumn(when, 2);
         grid.Children.Add(when);
 
-        var row = new Border { Style = (Style)FindResource("HomeCard"), Padding = new Thickness(9, 7, 11, 7), Margin = new Thickness(0, 0, 0, 5), Cursor = Cursors.Hand, Child = grid };
+        var row = new Border { Style = (Style)FindResource("HomeCard"), Padding = new Thickness(9, 7, 11, 7), Margin = new Thickness(0), Cursor = Cursors.Hand, Child = grid };
+        return SwipeableRow(row,
+            open: () =>
+            {
+                Expand(ExpandKind.None);
+                try { Process.Start("explorer.exe", $"shell:AppsFolder\\{toast.AppId}"); }
+                catch { /* app can't be launched this way */ }
+            },
+            remove: () => RemoveFromInbox(item));
+    }
+
+    void RemoveFromInbox(InboxItem item)
+    {
+        _inbox.Remove(item);
+        _discordUnread = Math.Min(_discordUnread, _inbox.Count(i => i.Toast.App == DiscordName));
+        if (_expand == ExpandKind.Discord)
+            BuildDiscordCard();
+        else
+            BuildInbox();
+    }
+
+    /// <summary>
+    /// A row that slides sideways under the pointer, with a red delete layer behind it.
+    /// Far enough and it goes; a plain click still opens it.
+    /// </summary>
+    FrameworkElement SwipeableRow(Border row, Action open, Action remove)
+    {
+        var shift = new TranslateTransform();
+        row.RenderTransform = shift;
+
+        var bin = new TextBlock
+        {
+            Text = "",
+            FontFamily = (FontFamily)FindResource("IconFont"),
+            FontSize = 14,
+            Foreground = Brushes.White,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(16, 0, 16, 0),
+        };
+        var behind = new Border { CornerRadius = new CornerRadius(16), Background = new SolidColorBrush(RedColor), Opacity = 0, Child = bin };
+
+        var holder = new Grid { Margin = new Thickness(0, 0, 0, 5), ClipToBounds = true };
+        holder.Children.Add(behind);
+        holder.Children.Add(row);
+
+        Point? start = null;
+        var dragging = false;
+
+        row.MouseLeftButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            start = e.GetPosition(holder);
+            dragging = false;
+            row.CaptureMouse();
+        };
+        row.MouseMove += (_, e) =>
+        {
+            if (start is not { } from)
+                return;
+            var dx = e.GetPosition(holder).X - from.X;
+            dragging |= Math.Abs(dx) > 6;
+            if (!dragging)
+                return;
+            e.Handled = true;
+            shift.BeginAnimation(TranslateTransform.XProperty, null);
+            shift.X = dx;
+            behind.Opacity = Math.Clamp(Math.Abs(dx) / RowSwipeDistance, 0, 1);
+            bin.HorizontalAlignment = dx > 0 ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        };
         row.MouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
-            Expand(ExpandKind.None);
-            try { Process.Start("explorer.exe", $"shell:AppsFolder\\{toast.AppId}"); }
-            catch { /* app can't be launched this way */ }
+            start = null;
+            row.ReleaseMouseCapture();
+            if (!dragging)
+            {
+                open();
+                return;
+            }
+            dragging = false;
+
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            if (Math.Abs(shift.X) < RowSwipeDistance)
+            {
+                shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+                behind.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(180)));
+                return;
+            }
+            var away = new DoubleAnimation(Math.Sign(shift.X) * holder.ActualWidth, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease };
+            away.Completed += (_, _) => remove();
+            shift.BeginAnimation(TranslateTransform.XProperty, away);
         };
-        return row;
+        return holder;
     }
 
     void InboxQuiet_Click(object sender, RoutedEventArgs e)

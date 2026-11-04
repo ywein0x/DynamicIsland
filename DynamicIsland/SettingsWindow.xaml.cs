@@ -34,6 +34,7 @@ public partial class SettingsWindow : Window
         [
             new("Genel", "", "#8E8E93", GeneralPage),
             new("Görünüm", "", "#AF52DE", AppearancePage),
+            new("Ana menü", "", "#FF9500", HomePage),
             new("Müzik", "", "#FF2D55", MusicPage),
             new("Bildirimler", "", "#FF3B30", NotificationsPage),
             new("Sistem", "", "#34C759", SystemPage),
@@ -122,23 +123,52 @@ public partial class SettingsWindow : Window
 
     // ---------- Pages ----------
 
-    FrameworkElement[] GeneralPage() =>
-    [
-        Group(null,
-            ToggleRow("Windows ile başlat", "Bilgisayar açılınca ada da açılır", () => Autostart.IsEnabled, v => Autostart.IsEnabled = v),
-            Row("Şehir", "Ana menüdeki hava durumu kartı için", CityBox())),
-        Note("Adayı kapatmak için gizli simgeler alanındaki ikona sağ tıklayıp Çıkış'ı seç."),
-    ];
+    FrameworkElement[] GeneralPage()
+    {
+        var reset = new Button { Content = "Sıfırla", Style = (Style)FindResource("PillButton") };
+        reset.Click += (_, _) =>
+        {
+            if (MessageBox.Show(this, "Tüm ayarlar varsayılana dönsün mü? Beğeniler ve takvim etkinlikleri silinmez.", "Dynamic Island",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+            Settings.ResetAll();
+            ((RadioButton)Nav.Children[0]).IsChecked = false;
+            ((RadioButton)Nav.Children[0]).IsChecked = true;
+        };
+
+        return
+        [
+            Group(null,
+                ToggleRow("Windows ile başlat", "Bilgisayar açılınca ada da açılır", () => Autostart.IsEnabled, v => Autostart.IsEnabled = v),
+                Row("Şehir", "Ana menüdeki hava durumu için", CityBox()),
+                SegmentRow("Üst kenardan açılma", [("fast", "Hızlı"), ("normal", "Normal"), ("slow", "Yavaş"), ("off", "Kapalı")],
+                    Settings.RevealDelay, v => Settings.RevealDelay = v)),
+            Note("Üst kenardan açılma: fareyi ekranın en üst ortasında ne kadar bekletince adanın görüneceği. "
+                 + "Kapalıysa ana menüyü gizli simgelerdeki ikona sağ tıklayıp açabilirsin."),
+            Group(null, Row("Tüm ayarları sıfırla", "Beğeniler ve takvim etkinlikleri silinmez", reset)),
+            Note("Adayı kapatmak için gizli simgeler alanındaki ikona sağ tıklayıp Çıkış'ı seç."),
+        ];
+    }
 
     FrameworkElement[] AppearancePage() =>
     [
         Group(null,
             ThemeRow(),
-            SegmentRow("Ada boyutu", [("small", "Küçük"), ("normal", "Normal"), ("large", "Büyük")],
+            Row("Vurgu rengi", "Hava durumu, takvim, ses ve müzik çubukları", AccentPicker())),
+        Caption("Ada"),
+        Group(null,
+            SegmentRow("Boyut", [("small", "Küçük"), ("normal", "Normal"), ("large", "Büyük")],
                 Settings.IslandSize, v => Settings.IslandSize = v),
             SegmentRow("Köşeler", [("sharp", "Keskin"), ("normal", "Normal"), ("round", "Yuvarlak")],
                 Settings.IslandCorners, v => Settings.IslandCorners = v),
-            Row("Vurgu rengi", "Hava durumu, takvim, ses ve müzik çubukları", AccentPicker())),
+            SegmentRow("Üstten boşluk", [("0", "Yok"), ("8", "Az"), ("16", "Çok")],
+                Settings.IslandGap, v => Settings.IslandGap = v)),
+        Caption("Hareket"),
+        Group(null,
+            SegmentRow("Animasyon", [("calm", "Sakin"), ("normal", "Normal"), ("fast", "Hızlı")],
+                Settings.AnimationSpeed, v => Settings.AnimationSpeed = v),
+            FeatureRow(Feature.SoftEntrance, "Yumuşak geçiş", "Küçük haplar bulanıktan netleşerek belirir"),
+            FeatureRow(Feature.Shadow, "Gölge", "Açık kartların altındaki gölge")),
     ];
 
     Grid SegmentRow(string title, (string Value, string Label)[] options, string current, Action<string> set)
@@ -213,15 +243,150 @@ public partial class SettingsWindow : Window
                 Settings.WeatherCity = box.Text.Trim();
         };
         return new Border { CornerRadius = new CornerRadius(7), Child = box }.Themed(Border.BackgroundProperty, "TrackBrush");
-    }    FrameworkElement[] MusicPage() =>
+    }
+
+    FrameworkElement[] HomePage()
+    {
+        var page = new List<FrameworkElement>
+        {
+            Caption("Kartlar"),
+            Group(null,
+                FeatureRow(Feature.HomeWeather, "Hava durumu"),
+                FeatureRow(Feature.HomeCalendar, "Takvim"),
+                FeatureRow(Feature.HomeApps, "En çok kullanılanlar"),
+                FeatureRow(Feature.SystemStats, "Sistem durumu", "Boştayken CPU, RAM ve GPU sıcaklığı")),
+            Caption("Kısayollar"),
+            Group(null,
+                FeatureRow(Feature.TileTimer, "Zamanlayıcı"),
+                FeatureRow(Feature.TileInbox, "Bildirimler"),
+                FeatureRow(Feature.TileFavorites, "Beğeniler"),
+                FeatureRow(Feature.TileClipboard, "Pano"),
+                FeatureRow(Feature.TileShelf, "Dosya rafı")),
+            Caption("En çok kullanılanlar"),
+            Group(null,
+                SegmentRow("Kaç uygulama", [("3", "3"), ("4", "4"), ("5", "5")], Settings.TopAppCount, v => Settings.TopAppCount = v),
+                FeatureRow(Feature.HideBrowsers, "Tarayıcıları gizle", "Chrome, Edge, Opera, Brave ve benzerleri listede yer almaz")),
+        };
+
+        // One switch per app, so anything can be taken off the list.
+        var hideBrowsers = Settings.Get(Feature.HideBrowsers);
+        var apps = AppUsageReader.Latest.Where(a => !(hideBrowsers && AppUsageReader.IsBrowser(a)))
+            .Where((a, i) => i < 10 || Settings.IsAppHidden(a.Name)).ToList();
+        if (apps.Count > 0)
+        {
+            page.Add(Caption("Listede gösterilecek uygulamalar"));
+            page.Add(Group(null, apps.Select(app => (FrameworkElement)ToggleRow(app.Name,
+                string.Join(" · ", new[] { app.FocusText, app.RunsText }.Where(s => s.Length > 0)),
+                () => !Settings.IsAppHidden(app.Name), v => Settings.SetAppHidden(app.Name, !v))).ToArray()));
+        }
+        page.Add(Note("Sayılar Windows'un kendi kaydından gelir, ada ayrıca takip yapmaz. Windows bazı açılışları saymaz, bu yüzden gerçek rakamlar daha yüksek olabilir."));
+        return [.. page];
+    }
+
+    FrameworkElement[] MusicPage() =>
     [
         Group(null,
-            ToggleRow("Müziği sürekli göster", "Kapalıyken sadece şarkı değişince birkaç saniye görünür",
+            ToggleRow("Müziği sürekli göster", "Kapalıyken sadece şarkı değişince görünür",
                 () => Settings.AlwaysShowMedia, v => Settings.AlwaysShowMedia = v),
+            FeatureRow(Feature.MusicFlash, "Şarkı değişince göster"),
+            SegmentRow("Görünme süresi", [("2", "2 sn"), ("4", "4 sn"), ("8", "8 sn")],
+                Settings.MusicFlashSeconds, v => Settings.MusicFlashSeconds = v)),
+        Group(null,
             FeatureRow(Feature.Marquee, "Kayan şarkı adı", "Sığmayan isimler yavaşça kayar"),
-            FeatureRow(Feature.RealWaveform, "Gerçek ses dalgası", "Çubuklar çalan müziğe göre hareket eder")),
-        Note("YouTube videoları ve Shorts gösterilmez; sadece müzik uygulamaları ve YouTube Music gibi şarkı bilgisi gönderen siteler."),
+            FeatureRow(Feature.RealWaveform, "Gerçek ses dalgası", "Çubuklar çalan müziğe göre hareket eder"),
+            ToggleRow("Videoları da göster", "YouTube videoları ve Shorts da adada görünür",
+                () => Settings.Get(Feature.ShowVideos, fallback: false), v => Settings.Set(Feature.ShowVideos, v))),
+        Caption("Spotify"),
+        .. SpotifySection(),
     ];
+
+    FrameworkElement[] SpotifySection()
+    {
+        if (SpotifyClient.Connected)
+        {
+            var leave = new Button { Content = "Bağlantıyı kes", Style = (Style)FindResource("PillButton") };
+            leave.Click += (_, _) =>
+            {
+                SpotifyClient.Disconnect();
+                ReloadPage();
+            };
+            return
+            [
+                Group(null, Row("Spotify'a bağlı", "Kalp, Spotify'daki Beğenilenler ile birlikte çalışır", leave)),
+                Note("Beğenilmiş şarkılarda kalp dolu görünür; kalbe basınca Spotify'da eklenir veya çıkarılır."),
+            ];
+        }
+
+        var box = new TextBox
+        {
+            Width = 190,
+            FontSize = 12,
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            Padding = new Thickness(8, 5, 8, 5),
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        box.SetResourceReference(Control.ForegroundProperty, "Fg");
+        box.SetResourceReference(TextBoxBase.CaretBrushProperty, "Fg");
+        var boxFrame = new Border { CornerRadius = new CornerRadius(7), Child = box, Margin = new Thickness(0, 0, 8, 0) }
+            .Themed(Border.BackgroundProperty, "TrackBrush");
+
+        var connect = new Button { Content = "Bağlan", Style = (Style)FindResource("PillButton") };
+        var controls = new StackPanel { Orientation = Orientation.Horizontal };
+        controls.Children.Add(boxFrame);
+        controls.Children.Add(connect);
+
+        var row = Row("Client ID", "Bağlanmadan kalp sadece adadaki listeye ekler", controls);
+        var status = (TextBlock)((StackPanel)row.Children[0]).Children[1];
+        connect.Click += async (_, _) =>
+        {
+            var id = box.Text.Trim();
+            if (id.Length == 0)
+            {
+                status.Text = "Önce Client ID'yi yapıştır";
+                return;
+            }
+            connect.IsEnabled = false;
+            status.Text = "Tarayıcıda Spotify'ı onayla…";
+            try
+            {
+                using var wait = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                await SpotifyClient.ConnectAsync(id, wait.Token);
+                ReloadPage();
+            }
+            catch (Exception ex)
+            {
+                status.Text = ex is OperationCanceledException ? "Bağlantı onaylanmadı" : "Bağlanılamadı, Client ID ve yönlendirme adresini kontrol et";
+                connect.IsEnabled = true;
+            }
+        };
+
+        var open = new Button { Content = "Aç", Style = (Style)FindResource("PillButton") };
+        open.Click += (_, _) => Process.Start(new ProcessStartInfo(SpotifyClient.DashboardUrl) { UseShellExecute = true });
+        var copy = new Button { Content = "Kopyala", Style = (Style)FindResource("PillButton") };
+        copy.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(SpotifyClient.RedirectUri); }
+            catch { /* another app is holding the clipboard */ }
+        };
+
+        return
+        [
+            Group(null,
+                Row("1. Geliştirici sayfası", "Spotify hesabınla gir, Create app'e bas", open),
+                Row("2. Redirect URI", SpotifyClient.RedirectUri + " (Web API'yi de seç)", copy),
+                row),
+            Note("Spotify'ın kuralı gereği her kullanıcı kendi uygulamasını oluşturur ve hesabın Premium olması gerekir. Bir kez yapman yeterli; "
+                 + "giriş bilgin sadece bu bilgisayarda şifreli olarak tutulur. Client ID, oluşturduğun uygulamanın ayarlarında yazar."),
+        ];
+    }
+
+    void ReloadPage()
+    {
+        var current = Nav.Children.OfType<RadioButton>().First(r => r.IsChecked == true);
+        current.IsChecked = false;
+        current.IsChecked = true;
+    }
 
     FrameworkElement[] NotificationsPage()
     {
@@ -229,8 +394,18 @@ public partial class SettingsWindow : Window
         {
             Group(null,
                 FeatureRow(Feature.Notifications, "Uygulama bildirimleri", "WhatsApp, Discord gibi uygulamaların bildirimleri"),
-                ToggleRow("Rahatsız Etme", "Bildirimler adada açılmaz, ana menüdeki Bildirim listesinde birikir",
+                SegmentRow("Görünme süresi", [("3", "3 sn"), ("5", "5 sn"), ("8", "8 sn")],
+                    Settings.BannerSeconds, v => Settings.BannerSeconds = v),
+                ToggleRow("İçeriği gizle", "Adada sadece \"Yeni bildirim\" yazar; mesaj ana menüdeki listede okunur",
+                    () => Settings.Get(Feature.HideNotificationText, fallback: false), v => Settings.Set(Feature.HideNotificationText, v))),
+            Caption("Rahatsız Etme"),
+            Group(null,
+                ToggleRow("Rahatsız Etme", "Bildirimler adada açılmaz, listede birikir",
                     () => Settings.DoNotDisturb, v => Settings.DoNotDisturb = v),
+                SegmentRow("Otomatik saatler", [("off", "Kapalı"), ("22-08", "22:00-08:00"), ("00-08", "00:00-08:00")],
+                    Settings.QuietHours, v => Settings.QuietHours = v)),
+            Caption("Diğer"),
+            Group(null,
                 FeatureRow(Feature.Downloads, "İndirmeler", "Tarayıcı indirmelerinin ilerlemesi"),
                 FeatureRow(Feature.Screenshots, "Ekran görüntüsü önizlemesi", "Win+Shift+S sonrası küçük önizleme")),
         };
@@ -255,16 +430,24 @@ public partial class SettingsWindow : Window
         Group(null,
             FeatureRow(Feature.Volume, "Ses seviyesi"),
             FeatureRow(Feature.Battery, "Şarj ve düşük pil"),
+            FeatureRow(Feature.BatteryBubble, "Pil yuvarlağı", "Ada açılınca sağında pil durumu görünür (pili olan bilgisayarlarda)"),
+            FeatureRow(Feature.UsageWarning, "Yüksek kullanım uyarısı", "RAM, ekran kartı veya işlemci çok yüklenince ada açıldığında sağında gösterir"),
             FeatureRow(Feature.LockKeys, "Caps Lock ve Num Lock"),
             FeatureRow(Feature.Privacy, "Kamera ve mikrofon", "Bir uygulama kullanmaya başlayınca haber verir"),
-            FeatureRow(Feature.DiscordActivity, "Discord", "Sesli kanalda olduğunu ve konuşulduğunu gösterir"),
-            FeatureRow(Feature.SystemStats, "Sistem durumu", "Üst kenarda beklerken CPU, RAM ve GPU sıcaklığı")),
+            FeatureRow(Feature.DiscordActivity, "Discord", "Sesli kanalda olduğunu ve konuşulduğunu gösterir")),
     ];
 
     FrameworkElement[] ToolsPage() =>
     [
+        Caption("Zamanlayıcı"),
         Group(null,
-            FeatureRow(Feature.Clipboard, "Pano geçmişi", "Son 5 kopyalanan metin, sadece bellekte tutulur"),
+            FeatureRow(Feature.TimerSound, "Alarm sesi", "Süre dolunca Windows alarm sesi çalar")),
+        Caption("Pano"),
+        Group(null,
+            FeatureRow(Feature.Clipboard, "Pano geçmişi", "Sadece bellekte tutulur, uygulama kapanınca silinir"),
+            SegmentRow("Hatırlanacak metin", [("3", "3"), ("5", "5"), ("8", "8")], Settings.ClipboardSize, v => Settings.ClipboardSize = v)),
+        Caption("Diğer"),
+        Group(null,
             FeatureRow(Feature.Shelf, "Dosya rafı", "Dosyaları ekranın üst ortasına sürükleyip bırak"),
             FeatureRow(Feature.GameSummary, "Oyun oturumu özeti", "Oyun kapanınca ne kadar oynadığını gösterir")),
     ];
